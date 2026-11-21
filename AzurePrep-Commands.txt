@@ -1,0 +1,92 @@
+﻿##############################################################################
+# Version: ALF Lab Builder 2.0.14   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# AZURE PREPARATION - Azure Local lab: {{ClusterName}}
+# Created by the ALF Lab Builder from your lab values.
+#
+# Run in PowerShell with the Azure CLI installed, or in Azure Cloud Shell (PowerShell).
+# Paste ONE STEP at a time and read the output before moving on.
+# Every step is safe to run again.
+#
+#   Tenant           : {{TenantId}}
+#   Subscription     : {{SubscriptionId}}
+#   Region           : {{ArcRegion}}
+#   Host VM RG       : {{HostResourceGroup}}
+#   Cluster RG       : {{ClusterResourceGroup}}
+##############################################################################
+
+
+# ---------- STEP 1 - Sign in and select the subscription ----------
+az login --tenant {{TenantId}}
+az account set --subscription {{SubscriptionId}}
+az account show --query "{Subscription:name, Id:id, State:state, SignedInAs:user.name}" -o table
+
+
+# ---------- STEP 2 - Create the resource groups ----------
+# Host VM (super-host) resource group - the Azure VM, its disks, NIC, public IP and NSG
+az group create --name {{HostResourceGroup}} --location {{ArcRegion}} -o table
+
+# Azure Local cluster resource group - ONE PER CLUSTER
+# Arc machines, cluster, Key vault, witness storage account and custom location go here
+az group create --name {{ClusterResourceGroup}} --location {{ArcRegion}} -o table
+
+
+# ---------- STEP 3 - Register the resource providers Azure Local needs ----------
+# Takes a few minutes the first time. Already-registered providers are skipped quickly.
+foreach ($rp in "Microsoft.HybridCompute","Microsoft.GuestConfiguration","Microsoft.HybridConnectivity",
+                "Microsoft.AzureStackHCI","Microsoft.Kubernetes","Microsoft.KubernetesConfiguration",
+                "Microsoft.ExtendedLocation","Microsoft.ResourceConnector","Microsoft.HybridContainerService",
+                "Microsoft.Attestation","Microsoft.Storage","Microsoft.Insights","Microsoft.KeyVault") {
+    az provider register --namespace $rp --wait
+    "{0,-38} {1}" -f $rp, (az provider show --namespace $rp --query registrationState -o tsv)
+}
+
+
+# ---------- STEP 4 - Assign the deployment roles ----------
+# You need Owner or User Access Administrator to assign roles.
+# Who gets the roles - the account you signed in with. For someone else, use instead:
+#   $UserId = az ad user show --id someone@contoso.com --query id -o tsv
+$UserId   = az ad signed-in-user show --query id -o tsv
+$RGScope  = "/subscriptions/{{SubscriptionId}}/resourceGroups/{{ClusterResourceGroup}}"
+$SubScope = "/subscriptions/{{SubscriptionId}}"
+
+# Roles on the CLUSTER resource group
+#   Key Vault roles     - the deployment creates a Key vault and stores secrets in it
+#                         (Owner/Contributor alone is NOT enough - missing these gives
+#                          "Insufficient permissions at resource group level" in the wizard)
+#   Storage             - the deployment creates the cloud witness storage account
+#   Connected Machine   - registering the nodes with Azure Arc and managing them
+foreach ($role in "Key Vault Data Access Administrator","Key Vault Secrets Officer","Key Vault Contributor",
+                  "Storage Account Contributor","Azure Connected Machine Onboarding",
+                  "Azure Connected Machine Resource Administrator") {
+    az role assignment create --assignee-object-id $UserId --assignee-principal-type User --role $role --scope $RGScope -o none
+    "Resource group : $role"
+}
+
+# Roles on the SUBSCRIPTION
+foreach ($role in "Azure Stack HCI Administrator","Reader") {
+    az role assignment create --assignee-object-id $UserId --assignee-principal-type User --role $role --scope $SubScope -o none
+    "Subscription   : $role"
+}
+
+# Check what's assigned
+az role assignment list --assignee $UserId --all --query "[].{Role:roleDefinitionName, Scope:scope}" -o table
+
+# IMPORTANT: sign OUT of the Azure portal and back IN so it picks up the new roles.
+
+
+# ---------- STEP 5 - REMINDER: review Azure Policy BEFORE registering the nodes ----------
+# Customer tenants often have policies - usually inherited from a management group or the
+# subscription - that act on Arc machines as soon as the nodes register. Deny, DeployIfNotExists
+# and Modify policies can block the deployment or install extensions that break it.
+# Symptom: nodes show "Connected", extensions "Succeeded", but deployment operations time out.
+#
+# Quick look - every policy assignment that applies to the cluster resource group:
+az policy assignment list --scope $RGScope --disable-scope-strict-match `
+    --query "[].{Policy:displayName, Enforcement:enforcementMode, AssignedAt:scope}" -o table
+
+# Full risk report (effects, which ones target Arc machines, CSV for the customer):
+#   13.Workstation-AzurePrereqs.ps1      - before the nodes register
+#   15.Workstation-PolicyReview.ps1      - after the nodes register (can create approved exemptions)
+#
+# Agree any exemptions with the customer's governance team BEFORE you start.
+##############################################################################

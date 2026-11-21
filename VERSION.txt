@@ -1,0 +1,5 @@
+﻿ALF Lab Builder
+Version 2.0.14
+Development baseline 2026-11-16
+Bundled cluster identifier: 2001 (version 2.0.01); students choose their own four digits and click Apply identifier.
+Lab build guide: ALF-Lab-Build-Guide-v1.0.24.docx (source guide; 2.0.14 update pending)

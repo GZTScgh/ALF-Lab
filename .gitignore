@@ -3,3 +3,23 @@ LabValues.json
 *-State.json
 *-Nodes.json
 Logs/
+
+# Local plans and exported snapshots; only the sanitized starter is published.
+LabValues.*.json
+!LabValues.example.json
+
+# Generated configuration, guest receipts and student account details.
+Generated/
+NodeFiles/
+ALFGuestConsole-*.json
+ALFNodeDelivery.json
+LCMAccount.txt
+*.log
+
+# Lab images, packages and the local guide pending privacy review.
+*.iso
+*.vhd
+*.vhdx
+*.avhdx
+*.zip
+*.docx
