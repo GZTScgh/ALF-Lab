@@ -3,6 +3,18 @@
 The version goes up with every change. It's shown at the top of the Lab Builder window,
 in `VERSION.txt` and in the zip file name (`ALF-LabBuilder-v<version>.zip`).
 
+## 2.0.16
+- Simplify guest consoles to runnable setup cards (DC 4, Admin 1, Node 2), short descriptions and a handoff note, using the Host Console layout and green/blue status theme.
+- Replace student confirmation with read-only configuration detection; keep restart/error indicators, process identity and execution receipts. Old confirmations are ignored, and incomplete prerequisites warn rather than gate progress.
+- Detect generated node name/IP overrides and Arc bootstrap plus connected-agent target. Protect existing cluster storage from destructive setup reruns; optional AD OU/account creation is not claimed complete.
+- Add an optional 1600 x 900 current-session display button on DC/Admin with supported-mode testing and client-controlled/unsupported warnings.
+- Deliver/hash-check the new status/display helpers, add focused mock/layout cases and refresh matching rollout while preserving saved/private values and both desktop shortcuts.
+
+## 2.0.15
+- Add ALF Admin Console.lnk to the local Administrator desktop inside the planned admin station during host script 05 delivery, targeting C:\ISO\Launch-ALFAdminConsole.cmd.
+- Reuse a shared shortcut helper for DC/admin while preserving the existing DC destination, launcher and description. Retry refreshes shortcuts without guest configuration; failures warn and temporary host shortcuts are cleaned up.
+- Add focused DC/admin delivery and cleanup cases; preserve saved planning values, sanitized starter settings and compatible guest progress while refreshing matching rollout files.
+
 ## 2.0.14
 - Make the host script 01 time-zone change optional, including Host Console step 1 with -DiskOnly. Any unavailable requested ID falls back to Eastern Standard Time; missing Eastern or lookup/set failures warn and continue. Actual disk/folder errors still fail normally.
 - Apply the same general fallback to DC, admin-station and node configuration, replacing the Manitoba-only rule. Preserve the requested plan value, time-synchronization settings and student progress.

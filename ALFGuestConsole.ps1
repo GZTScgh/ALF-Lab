@@ -1,15 +1,14 @@
-﻿# Version: ALF Lab Builder 2.0.14
-# Shared graphical guide for configuration INSIDE a lab guest, not on the Hyper-V host.
+# Version: ALF Lab Builder 2.0.16
+# Shared DC/admin/node console. Completion is detected from this guest.
 param([Parameter(Mandatory = $true)][ValidateSet('DC', 'Admin', 'Node')][string]$Role)
 
-$ALFVersion = '2.0.14'
+$ALFVersion = '2.0.16'
+$Here = $PSScriptRoot
 try {
     Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase -ErrorAction Stop
 }
 catch {
-    Write-Host "The $Role graphical console cannot load WPF on this Windows installation." -ForegroundColor Red
-    Write-Host $_.Exception.Message
-    Write-Host 'No configuration was run. Use the numbered scripts individually and report this compatibility result.'
+    Write-Host "The $Role console cannot load WPF: $($_.Exception.Message). No configuration was run." -ForegroundColor Red
     exit 1
 }
 $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
@@ -21,181 +20,172 @@ if ([Threading.Thread]::CurrentThread.ApartmentState -ne 'STA') {
     Start-Process powershell.exe -ArgumentList "-NoProfile -STA -File `"$PSCommandPath`" -Role $Role"
     return
 }
+try {
+    foreach ($file in 'ALFGuestStatus.ps1', 'ALFGuestDisplay.ps1') {
+        $path = Join-Path $Here $file
+        $text = Get-Content -LiteralPath $path -Raw -ErrorAction Stop
+        if ($text -notmatch ('(?m)^# Version: ALF Lab Builder ' + [regex]::Escape($ALFVersion) + '(?:\s|$)')) {
+            throw "$file is not from this release; redeliver the complete guest console."
+        }
+        . $path
+    }
+}
+catch { Write-Host "Console helpers could not load: $($_.Exception.Message). No configuration was run." -ForegroundColor Red; exit 1 }
 
 function Get-GuestTasks([string]$GuestRole) {
     switch ($GuestRole) {
         'DC' {
             @(
-                [pscustomobject]@{ Id='Ready'; Script=''; Needs=@(); Title='Finish Windows setup and identify this VM'; Why='The domain controller will provide identity and DNS to the lab.'; Learn='Sign in as the local administrator inside the DC VM. Host step 05 must have copied the DC scripts and this console into C:\ISO.'; Check='Confirm that this is the domain-controller VM, Windows setup is complete, and you know its local Administrator password.' }
-                [pscustomobject]@{ Id='Network'; Script='06dc.DC-SetNameAndIP.ps1'; Needs=@('Ready'); Title='Set the DC name, IP address and time zone'; Why='A stable address lets every other VM find the domain DNS server.'; Learn='Configures the LAN adapter, static address, gateway and initial DNS; attempts an optional time-zone change (any unavailable ID falls back to Eastern Standard Time; failures warn and continue); renames the machine. If the name changes, it restarts automatically. Sign back in and reopen this console.'; Check='Run hostname and Get-NetIPConfiguration. Confirm ContosoDC1 and the planned DC address/gateway. Complete any restart before confirming.' }
-                [pscustomobject]@{ Id='Forest'; Script='07dc.DC-CreateForest.ps1'; Needs=@('Network'); Title='Create the Active Directory forest'; Why='The forest provides lab user/computer accounts, authentication and DNS.'; Learn='Installs AD DS, DNS and management tools, then promotes this VM. You choose a DSRM recovery password. Promotion restarts Windows; sign in as the domain Administrator afterward.'; Check='After restart, run Get-ADDomain and Get-Service NTDS,DNS. Confirm the expected lab domain and running services.' }
-                [pscustomobject]@{ Id='DNS'; Script='08dc.DC-PostConfig.ps1'; Needs=@('Forest'); Title='Finish DNS and optional DHCP configuration'; Why='DNS forwarders resolve internet names; reverse DNS maps lab addresses back to names.'; Learn='Configures forwarders, reverse lookup zone and DNS client settings. When enabled in the script, DHCP supplies the planned scope and options. This does not deploy the Azure Local cluster.'; Check='Inspect Get-DnsServerForwarder and Get-DnsServerZone. If DHCP is enabled, check its scope, address range, gateway and DNS options. Confirm other VMs can resolve the lab domain.' }
-                [pscustomobject]@{ Id='Artifacts'; Script='09dc.DC-PrepareADForAzureLocal.ps1'; Needs=@('DNS'); Title='Prepare the cluster OU and deployment account'; Why='Azure Local deployment needs a dedicated OU and correctly delegated LCM account.'; Learn='Installs the AD preparation module and asks whether to create the OU/account. Keep the account password in your own secure records, not the console. Choosing not to create them is not completion.'; Check='Confirm the chosen OU, LCM account and required permissions in Active Directory. C:\ISO\LCMAccount.txt records the names, not the password. Give these details to the student deploying the cluster.' }
+                [pscustomobject]@{ Id='Network'; Script='06dc.DC-SetNameAndIP.ps1'; Needs=@(); Title='Set the DC name and network'; Text='Set the static IP and computer name. Restarts if renamed.' }
+                [pscustomobject]@{ Id='Forest'; Script='07dc.DC-CreateForest.ps1'; Needs=@('Network'); Title='Create the domain'; Text='Install AD DS and DNS, then promote and restart the DC.' }
+                [pscustomobject]@{ Id='DNS'; Script='08dc.DC-PostConfig.ps1'; Needs=@('Forest'); Title='Configure DNS and optional DHCP'; Text='Set DNS forwarders, reverse lookup and the planned DHCP scope.' }
+                [pscustomobject]@{ Id='Artifacts'; Script='09dc.DC-PrepareADForAzureLocal.ps1'; Needs=@('DNS'); Title='Install Azure Local AD tools'; Text='Install the preparation module; optionally create the cluster OU/account.' }
             )
         }
         'Admin' {
             @(
-                [pscustomobject]@{ Id='Ready'; Script=''; Needs=@(); Title='Confirm the DC is ready and Windows setup is finished'; Why='Domain join needs working AD and DNS before configuring the admin station.'; Learn='Complete DC console steps through DNS first. Host step 05 copies the admin script and this console into C:\ISO. Sign in initially as the local administrator.'; Check='Confirm this is the admin-station VM, the DC is online and its DNS/forest setup is finished, and you have a domain account allowed to join computers.' }
-                [pscustomobject]@{ Id='Configure'; Script='08adm.Admin-Configure.ps1'; Needs=@('Ready'); Title='Configure networking, tools, name and domain membership'; Why='The admin station is the student workstation for managing the nested lab.'; Learn='One existing script configures static LAN/IP/gateway, uses DC DNS, attempts the optional time-zone change (any unavailable ID falls back to Eastern Standard Time; failures warn and continue), installs cluster/Hyper-V/AD/DNS tools, renames this VM and joins the domain. Read each stage in its PowerShell window; supply domain credentials when prompted. Restart when offered.'; Check='After restart, check hostname, Get-NetIPConfiguration and (Get-CimInstance Win32_ComputerSystem).PartOfDomain. Verify RSAT-Clustering, RSAT-Hyper-V-Tools, RSAT-AD-Tools, RSAT-DNS-Server and GPMC are installed with Get-WindowsFeature.' }
-                [pscustomobject]@{ Id='Manage'; Script=''; Needs=@('Configure'); Title='Sign in with a domain account and test management access'; Why='Installed tools are useful only when DNS, credentials and permissions work.'; Learn='Sign in using your domain account. Open Hyper-V Manager, DNS Manager, AD Users and Computers and Failover Cluster Manager as appropriate. Connection permissions may require additional setup; installing tools alone does not grant remote access.'; Check='Resolve the DC name and verify domain sign-in. Open the installed tools and confirm the management connections you need. Do not create a cluster here as a substitute for Azure portal deployment.' }
+                [pscustomobject]@{ Id='Configure'; Script='08adm.Admin-Configure.ps1'; Needs=@(); Title='Configure the admin station'; Text='Set networking, install management tools and join the domain. Restart afterward.' }
             )
         }
         'Node' {
             @(
-                [pscustomobject]@{ Id='Ready'; Script=''; Needs=@(); Title='Finish Azure Local installation and host-side preparation'; Why='Each node needs its own identity, IP address and correctly named virtual adapters.'; Learn='Install Azure Local and set Administrator on this node. Run host step 11 for all nodes; it renames NICs and copies a node-specific 12.Node-Configure.ps1. From SConfig choose option 15, cd C:\ISO, then run .\Launch-ALFNodeConsole.cmd. GUI compatibility on Server Core is being trialled.'; Check='Confirm this is the intended node, not the host. Inspect the AZLnodename and IPAddress variables in 12.Node-Configure.ps1, and Get-NetAdapter names. Never use another node''s configure script.' }
-                [pscustomobject]@{ Id='Configure'; Script='12.Node-Configure.ps1'; Needs=@('Ready'); Title='Configure this node for the lab'; Why='Deployment needs consistent management networking, local credentials and clean storage.'; Learn='Sets management IP/DC DNS; attempts an optional time-zone change (any unavailable ID falls back to Eastern Standard Time; failures warn and continue); creates the second local admin; removes old storage pools and cleans eligible data disks; enables management access; renames the node and offers restart. STORAGE CLEANUP IS DESTRUCTIVE. Use the same second-admin password on both nodes. Domain join is optional here; follow the script and your deployment plan.'; Check='After restart, verify hostname, management IP/gateway/DC DNS, all adapters, the second local admin and the four intended data disks. Read storage-cleanup output and do not confirm if the wrong disks were targeted.' }
-                [pscustomobject]@{ Id='AzureReady'; Script=''; Needs=@('Configure'); Title='Confirm Azure prerequisites and the second node'; Why='Both nodes must register into the intended tenant, subscription, cluster resource group and region.'; Learn='In the Planning Console/workstation, complete resource providers, role assignments and policy review (script 13 / Azure preparation). Prepare AD artifacts on the DC. Repeat node configuration on the other node. Keep host and cluster resource groups separate.'; Check='Confirm both node identities/configuration, the target Azure values in 14.Node-ArcRegister.ps1, required roles/providers and policy review, and the AD OU/account. This console cannot prove prerequisites on another VM or in Azure.' }
-                [pscustomobject]@{ Id='Arc'; Script='14.Node-ArcRegister.ps1'; Needs=@('AzureReady'); Title='Register this node with Azure Arc'; Why='Arc connects the guest to Azure so Azure Local deployment can discover and manage it.'; Learn='Installs/loads registration components, prompts for Azure device-code sign-in and registers this node. Use the planned tenant/subscription/cluster resource group/region. This is registration, not cluster deployment. Logs are under C:\ISO\Logs.'; Check='Run & "C:\Program Files\AzureConnectedMachineAgent\azcmagent.exe" show and inspect Get-ArcBootstrapStatus when available. Confirm connected registration in the correct Azure target and a healthy portal entry. Repeat on the other node.' }
-                [pscustomobject]@{ Id='Deploy'; Script=''; Needs=@('Arc'); Title='Hand off to policy review and Azure portal deployment'; Why='Only after both nodes and AD/Azure prerequisites are ready can the cluster be deployed.'; Learn='Return to workstation script 15 for policy review of the registered nodes, then Planning Console section 7 for Azure portal wizard values. Review health of BOTH nodes. Deploy from the portal; this console does not deploy the cluster.'; Check='Confirm both Arc resources are healthy, policy checks are reviewed, the OU/account details are ready, and you have the cluster wizard values. This acknowledgment means ready to hand off, not a deployed cluster.' }
+                [pscustomobject]@{ Id='Configure'; Script='12.Node-Configure.ps1'; Needs=@(); Title='Configure this node'; Text='Set networking and the local admin. Includes destructive data-disk cleanup.'; Destructive=$true }
+                [pscustomobject]@{ Id='Arc'; Script='14.Node-ArcRegister.ps1'; Needs=@('Configure'); Title='Register with Azure Arc'; Text='Register this node in Azure. May update and restart before finishing.' }
             )
         }
     }
 }
 
-function Get-GuestRecord([string]$Id) { return $script:Records[$Id] }
-function Clear-GuestDependentConfirmations([string]$Id) {
-    foreach ($dependent in $Tasks | Where-Object { $_.Needs -contains $Id }) {
-        if ($script:Records.ContainsKey($dependent.Id)) { $script:Records[$dependent.Id].Confirmed = $false }
-        Clear-GuestDependentConfirmations $dependent.Id
-    }
-}
-function Save-GuestState {
-    [ordered]@{ Role=$Role; Version=$ALFVersion; Steps=$script:Records } |
-        ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $StateFile -Encoding UTF8 -ErrorAction Stop
-}
-function Get-GuestStatus($Task) {
-    $record = Get-GuestRecord $Task.Id
-    if ($script:Processes.ContainsKey($Task.Id)) {
-        if (-not $script:Processes[$Task.Id].HasExited) { return 'Running' }
-        $script:Processes[$Task.Id].Dispose()
-        $script:Processes.Remove($Task.Id)
-    }
-    if ($record -and $record.Confirmed) { return 'Student confirmed' }
-    if ($record -and $record.ResultPath -and (Test-Path -LiteralPath $record.ResultPath)) {
-        try {
-            $result = Get-Content -LiteralPath $record.ResultPath -Raw | ConvertFrom-Json
-            if ($result.ExitCode -eq 0) { return 'Script returned - check result' }
-            return 'Last run failed'
-        } catch { return 'Receipt unreadable - check result' }
-    }
-    if ($record -and $record.Started) { return 'Interrupted / restarted - check result' }
-    return 'Not started'
-}
-function Get-GuestMissingNeeds($Task) {
-    return @($Task.Needs | Where-Object { -not ($script:Records[$_] -and $script:Records[$_].Confirmed) })
-}
-function Test-GuestScript($Task) {
-    if (-not $Task.Script) { return $null }
-    $path = Join-Path $Here $Task.Script
-    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { return "Missing script: $($Task.Script). Repeat host step 05 (DC/admin) or 11 (nodes)." }
-    $text = Get-Content -LiteralPath $path -Raw
-    if ($text -match '\{\{[A-Za-z0-9_]+\}\}|__NODENAME__|__NODEIP__') { return "Unfilled template: $($Task.Script). Roll out again and repeat host delivery; do not run this copy." }
-    if ($text -notmatch ('(?m)^# Version: ALF Lab Builder ' + [regex]::Escape($ALFVersion) + '(?:\s|$)')) { return "Version mismatch or missing stamp: $($Task.Script). Use the same release as this console." }
-    return $null
-}
 function Write-GuestLog([string]$Text) {
     $ui.txtLog.AppendText("[$(Get-Date -Format 'HH:mm:ss')] $Text`r`n")
     $ui.txtLog.ScrollToEnd()
 }
-function Set-GuestCardState($Card, [string]$Status, [string]$Problem) {
-    $state = if ($Problem -or $Status -eq 'Last run failed') { 'Failed' }
-        elseif ($Status -eq 'Student confirmed') { 'Done' }
-        elseif ($Status -eq 'Running') { 'Running' }
-        elseif ($Status -eq 'Not started') { 'NotDone' }
-        else { 'Attention' }
-    $Card.status.Text = if ($Problem) { 'Needs attention' } else { $Status }
-    $Card.status.Foreground = $Colors[$state]
-    $Card.statusDetail.Text = $Problem
-    $Card.numBack.Background = if ($state -eq 'Done') { $Colors.Done } else { $Colors.Running }
+function Save-GuestState {
+    [ordered]@{ Role=$Role; Version=$ALFVersion; SchemaVersion=2; Steps=$script:Records } |
+        ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $StateFile -Encoding UTF8 -ErrorAction Stop
 }
-
-function Refresh-GuestStatus {
-    $confirmed = 0
-    $busy = @($script:Processes.Values | Where-Object { -not $_.HasExited }).Count -gt 0
-    foreach ($task in $Tasks) {
-        $card = $script:Cards[$task.Id]
-        $status = Get-GuestStatus $task
-        $problem = Test-GuestScript $task
-        Set-GuestCardState $card $status $problem
-        $card.run.IsEnabled = [bool]$task.Script -and -not $busy -and -not $problem
-        $card.confirm.IsEnabled = -not $busy -and -not $problem
-        if ($status -eq 'Student confirmed') { $confirmed++ }
+function Test-GuestScript($Task) {
+    $path = Join-Path $Here $Task.Script
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { return "Missing $($Task.Script); redeliver the guest files." }
+    $text = Get-Content -LiteralPath $path -Raw -ErrorAction Stop
+    $requiredText = $text.Replace('{{TimeZone}}', '').Replace('{{LocalAdminPassword}}', '')
+    if ($requiredText -match '\{\{[A-Za-z0-9_]+\}\}|__NODENAME__|__NODEIP__') { return "Unfilled $($Task.Script); redeliver its prepared copy." }
+    if ($text -notmatch ('(?m)^# Version: ALF Lab Builder ' + [regex]::Escape($ALFVersion) + '(?:\s|$)')) { return "Wrong release: $($Task.Script)." }
+    return $null
+}
+function Get-GuestStatus($Task) {
+    $running = $false
+    if ($script:Processes.ContainsKey($Task.Id)) {
+        $process = $script:Processes[$Task.Id]
+        if (-not $process.HasExited) { $running=$true }
+        else { $process.Dispose(); $script:Processes.Remove($Task.Id) }
     }
-    $ui.txtProgress.Text = "$confirmed of $($Tasks.Count) steps student-confirmed"
+    if ($running) { return New-ALFGuestCheck 'Running' 'In its own PowerShell window.' $false }
+    try { $problem = Test-GuestScript $Task }
+    catch { return New-ALFGuestCheck 'Attention' "Script could not be inspected: $($_.Exception.Message)" $false }
+    if ($problem) { return New-ALFGuestCheck 'Attention' $problem $false }
+    $check = Get-ALFGuestTaskCheck $Task $Role $Here
+    $record = $script:Records[$Task.Id]
+    $receipt = $null; $receiptError = ''
+    if ($record.ResultPath -and (Test-Path -LiteralPath $record.ResultPath)) {
+        try {
+            $receipt = Get-Content -LiteralPath $record.ResultPath -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+            if ($receipt.ExitCode -isnot [int] -and $receipt.ExitCode -isnot [long]) { throw 'Result has no valid exit code.' }
+        }
+        catch { $receiptError = "Step result could not be read: $($_.Exception.Message)" }
+    }
+    return Resolve-ALFGuestTaskState $check $record $false $receipt $receiptError
+}
+function Set-GuestCardState($Card, $Check) {
+    $Card.status.Text = $StateText[$Check.State]
+    $Card.status.Foreground = $Colors[$Check.State]
+    $Card.statusDetail.Text = $Check.Detail
+    $Card.numBack.Background = if ($Check.State -eq 'Done') { $Colors.Done } else { $Colors.Running }
+}
+function Refresh-GuestStatus {
+    $busy = @($script:Processes.Values | Where-Object { -not $_.HasExited }).Count -gt 0
+    $done = 0
+    foreach ($task in $Tasks) {
+        $check = Get-GuestStatus $task
+        $script:Current[$task.Id] = $check
+        $card = $script:Cards[$task.Id]
+        Set-GuestCardState $card $check
+        $card.run.IsEnabled = -not $busy -and $check.RunAllowed
+        $card.run.ToolTip = if ($check.RunAllowed) { 'Run this setup script.' } else { $check.Detail }
+        $card.open.IsEnabled = Test-Path -LiteralPath (Join-Path $Here $task.Script)
+        if ($check.State -eq 'Done') { $done++ }
+    }
+    $ui.btnDisplay.IsEnabled = -not $busy
+    $ui.txtProgress.Text = "$done of $($Tasks.Count) steps done"
 }
 function Start-GuestStep([string]$Id) {
     $task = $Tasks | Where-Object Id -eq $Id | Select-Object -First 1
-    if (-not $task -or -not $task.Script) { return }
-    if (@($script:Processes.Values | Where-Object { -not $_.HasExited }).Count) { return }
-    $problem = Test-GuestScript $task
-    if ($problem) { Write-GuestLog $problem; return }
-    $needs = Get-GuestMissingNeeds $task
-    if ($needs.Count) { Write-GuestLog "Confirm these prerequisite steps first: $($needs -join ', ')."; return }
-    $message = "Run '$($task.Title)' INSIDE $env:COMPUTERNAME ($Role)?`n`n$($task.Learn)`n`nA separate PowerShell window will handle credentials and output. A restart may close both windows. Reopen this console after signing back in."
-    if ([Windows.MessageBox]::Show($window, $message, 'Confirm configuration step', 'YesNo', 'Warning') -ne 'Yes') { return }
+    if (-not $task) { throw "Unknown guest step '$Id'." }
+    if (@($script:Processes.Values | Where-Object { -not $_.HasExited }).Count) { Write-GuestLog 'Wait for the current step window to close.'; return }
+    Refresh-GuestStatus
+    $check = $script:Current[$Id]
+    if (-not $check.RunAllowed) { Write-GuestLog $check.Detail; return }
+    $missing = @($task.Needs | Where-Object { $script:Current[$_].State -ne 'Done' })
+    if ($missing.Count) {
+        $titles = @($Tasks | Where-Object Id -in $missing | ForEach-Object Title)
+        if ([Windows.MessageBox]::Show($window, "These steps are not done yet:`n$($titles -join "`n")`n`nRun this step anyway?", 'Earlier steps incomplete', 'YesNo', 'Warning') -ne 'Yes') { return }
+    }
+    if ($task.Destructive) {
+        $message = 'This removes storage pools and clears eligible data disks on THIS node. Never run it on a deployed cluster. Continue?'
+        if ([Windows.MessageBox]::Show($window, $message, 'Destructive disk cleanup', 'YesNo', 'Warning') -ne 'Yes') { return }
+    }
     $resultPath = Join-Path $Here ("ALFGuestConsole-$Role-$Id-" + [guid]::NewGuid().ToString('N') + '.json')
-    $script:Records[$Id] = @{ Confirmed=$false; Started=(Get-Date).ToString('o'); ResultPath=$resultPath }
-    Clear-GuestDependentConfirmations $Id
-    Save-GuestState
+    $script:Records[$Id] = @{ Started=(Get-Date).ToString('o'); ResultPath=$resultPath }
     try {
         $runner = Join-Path $Here 'ALFGuestStepRunner.ps1'
-        if (-not (Test-Path -LiteralPath $runner)) { throw 'ALFGuestStepRunner.ps1 is missing.' }
-        $args = "-NoProfile -STA -File `"$runner`" -ScriptPath `"$(Join-Path $Here $task.Script)`" -ResultPath `"$resultPath`""
-        $script:Processes[$Id] = Start-Process powershell.exe -ArgumentList $args -PassThru -ErrorAction Stop
-        $script:Records[$Id].ProcessId = $script:Processes[$Id].Id
-        $script:Records[$Id].ProcessStarted = $script:Processes[$Id].StartTime.ToUniversalTime().ToString('o')
+        if (-not (Test-Path -LiteralPath $runner -PathType Leaf)) { throw 'ALFGuestStepRunner.ps1 is missing.' }
         Save-GuestState
-        Write-GuestLog "Started $($task.Script). Read its output; do not confirm until after checking the result and any restart."
-    } catch { Write-GuestLog "Could not start step: $($_.Exception.Message). Windows protections have not been changed." }
-    Refresh-GuestStatus
-}
-function Confirm-GuestStep([string]$Id) {
-    $task = $Tasks | Where-Object Id -eq $Id | Select-Object -First 1
-    if (@($script:Processes.Values | Where-Object { -not $_.HasExited }).Count) { return }
-    if ((Get-GuestMissingNeeds $task).Count) { Write-GuestLog 'Confirm the earlier prerequisite steps first.'; return }
-    if (Test-GuestScript $task) { Write-GuestLog (Test-GuestScript $task); return }
-    $message = "Check before confirming:`n`n$($task.Check)`n`nHave you personally checked these results on the intended VM, including any required restart?`n`nThis records YOUR confirmation; it does not automatically test configuration or declare cluster deployment complete."
-    if ([Windows.MessageBox]::Show($window, $message, 'Check and confirm step', 'YesNo', 'Question') -ne 'Yes') { return }
-    if (-not $script:Records.ContainsKey($Id)) { $script:Records[$Id] = @{} }
-    $script:Records[$Id].Confirmed = $true
-    $script:Records[$Id].ConfirmedAt = (Get-Date).ToString('o')
-    Save-GuestState
-    Write-GuestLog "Student confirmed: $($task.Title)."
+        $args = "-NoProfile -STA -File `"$runner`" -ScriptPath `"$(Join-Path $Here $task.Script)`" -ResultPath `"$resultPath`""
+        $process = Start-Process powershell.exe -ArgumentList $args -WorkingDirectory $Here -PassThru -ErrorAction Stop
+        $script:Processes[$Id] = $process
+        $script:Records[$Id].ProcessId = $process.Id
+        $script:Records[$Id].ProcessStarted = $process.StartTime.ToUniversalTime().ToString('o')
+        Save-GuestState
+        Write-GuestLog "Started $($task.Script). Reopen this console after any restart."
+    }
+    catch {
+        $script:Records[$Id].LaunchError = "Could not start or record the step: $($_.Exception.Message)"
+        Write-GuestLog $script:Records[$Id].LaunchError
+        try { Save-GuestState }
+        catch { Write-GuestLog "Could not save the failure: $($_.Exception.Message)" }
+    }
     Refresh-GuestStatus
 }
 
-$Here = $PSScriptRoot
+$Tasks = @(Get-GuestTasks $Role)
 $StateFile = Join-Path $Here "ALFGuestConsole-$Role-State.json"
 $script:Records = @{}
 $script:Processes = @{}
 $script:Cards = @{}
-$stateWarning = ''
+$script:Current = @{}
 if (Test-Path -LiteralPath $StateFile) {
     try {
-        $saved = Get-Content -LiteralPath $StateFile -Raw | ConvertFrom-Json
-        # Planning-only sizing changes keep the existing guest workflow/state schema.
-        if ($saved.Role -ne $Role -or $saved.Version -notin @($ALFVersion, '2.0.7', '2.0.8', '2.0.9', '2.0.10', '2.0.11', '2.0.12', '2.0.13')) { throw 'State belongs to another role or release.' }
-        foreach ($property in $saved.Steps.PSObject.Properties) {
-            $record = @{}
-            foreach ($field in $property.Value.PSObject.Properties) { $record[$field.Name] = $field.Value }
-            $script:Records[$property.Name] = $record
+        $saved = Get-Content -LiteralPath $StateFile -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+        $script:Records = ConvertTo-ALFGuestRecords $saved $Role $ALFVersion @($Tasks | ForEach-Object Id)
+        foreach ($id in $script:Records.Keys) {
+            $record = $script:Records[$id]
             if ($record.ProcessId -and $record.ProcessStarted) {
                 $process = Get-Process -Id $record.ProcessId -ErrorAction SilentlyContinue
-                if ($process -and $process.StartTime.ToUniversalTime().ToString('o') -eq $record.ProcessStarted) {
-                    $script:Processes[$property.Name] = $process
-                }
+                if ($process -and $process.StartTime.ToUniversalTime().ToString('o') -eq $record.ProcessStarted) { $script:Processes[$id] = $process }
             }
         }
-    } catch {
-        Write-Host "Cannot safely load console state: $($_.Exception.Message). Original state preserved: $StateFile" -ForegroundColor Red
-        exit 1
     }
+    catch { Write-Host "Cannot safely load guest state: $($_.Exception.Message). Original state preserved." -ForegroundColor Red; exit 1 }
 }
-$Tasks = @(Get-GuestTasks $Role)
 $roleTitle = @{ DC='Domain Controller'; Admin='Admin Station'; Node='Azure Local Node' }[$Role]
+$next = @{
+    DC='Next: finish the admin station and nodes, then prepare the Azure Local deployment.'
+    Admin='Next: use the management tools and follow the Azure Local deployment steps.'
+    Node='Next: register the other node, review Azure Policy, then deploy from the Azure portal.'
+}[$Role]
 [xml]$xaml = @'
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-        Title="ALF Guest Console" Width="1300" Height="1000"
+        Title="ALF Guest Console" Width="1300" Height="850"
         WindowStartupLocation="CenterScreen" FontFamily="Segoe UI" FontSize="15" Background="#F3F3F3">
   <DockPanel Margin="12">
     <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8">
@@ -204,22 +194,19 @@ $roleTitle = @{ DC='Domain Controller'; Admin='Admin Station'; Node='Azure Local
         <Border Background="#0B5394" CornerRadius="4" Padding="8,2" Margin="12,4,0,4" VerticalAlignment="Center">
           <TextBlock Name="txtVersion" Foreground="White" FontWeight="SemiBold"/>
         </Border>
-        <TextBlock Name="txtProgress" FontSize="16" Foreground="#444444" Margin="16,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap"/>
+        <TextBlock Name="txtProgress" FontSize="16" Foreground="#444444" Margin="16,0,0,0" VerticalAlignment="Center"/>
       </WrapPanel>
       <TextBlock Name="txtMachine" Foreground="Gray" TextWrapping="Wrap" Margin="0,2,0,0"/>
-      <Border Background="#FFF4CE" BorderBrush="#E0B000" BorderThickness="1" CornerRadius="4" Padding="10,6" Margin="0,8,0,0">
-        <TextBlock Text="Run one step at a time on this guest. After a restart, reopen this console. Check and confirm each result before continuing. Closing a script successfully is NOT proof its configuration succeeded." TextWrapping="Wrap"/>
-      </Border>
     </StackPanel>
     <Grid DockPanel.Dock="Bottom" Margin="0,10,0,0">
-      <Grid.RowDefinitions>
-        <RowDefinition Height="Auto"/><RowDefinition Height="170"/>
-      </Grid.RowDefinitions>
-      <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
+      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="110"/></Grid.RowDefinitions>
+      <TextBlock Name="txtNext" Grid.Row="0" TextWrapping="Wrap" Foreground="#444444" Margin="0,0,0,8"/>
+      <WrapPanel Grid.Row="1" Margin="0,0,0,8">
         <Button Name="btnRefresh" Content="Refresh status" Width="150" Margin="0,0,8,0"/>
         <Button Name="btnFolder" Content="Open scripts folder" Width="175" Margin="0,0,8,0"/>
-      </StackPanel>
-      <TextBox Grid.Row="1" Name="txtLog" IsReadOnly="True" FontFamily="Consolas" FontSize="14"
+        <Button Name="btnDisplay" Content="1600 x 900 display" Width="165" ToolTip="Set this desktop to 1600 x 900 when supported."/>
+      </WrapPanel>
+      <TextBox Name="txtLog" Grid.Row="2" IsReadOnly="True" FontFamily="Consolas" FontSize="13"
                TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" Background="#FFFFFF"/>
     </Grid>
     <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Name="panelTasks"/></ScrollViewer>
@@ -230,79 +217,87 @@ $RowXaml = @'
 <Border xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         BorderBrush="#DDDDDD" BorderThickness="1" Background="White" CornerRadius="4" Padding="10" Margin="0,0,0,6">
   <Grid>
-    <Grid.ColumnDefinitions>
-      <ColumnDefinition Width="50"/><ColumnDefinition Width="*"/><ColumnDefinition Width="250"/><ColumnDefinition Width="Auto"/>
-    </Grid.ColumnDefinitions>
+    <Grid.ColumnDefinitions><ColumnDefinition Width="50"/><ColumnDefinition Width="*"/><ColumnDefinition Width="250"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
     <Border Grid.Column="0" Name="numBack" Width="34" Height="34" CornerRadius="17" Background="#0B5394" VerticalAlignment="Top">
       <TextBlock Name="num" Foreground="White" FontWeight="SemiBold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
     </Border>
     <StackPanel Grid.Column="1" Margin="4,0,12,0">
       <TextBlock Name="title" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap"/>
-      <TextBlock Name="why" FontWeight="SemiBold" TextWrapping="Wrap" Foreground="#444444" Margin="0,2,0,0"/>
-      <TextBlock Name="learn" TextWrapping="Wrap" Foreground="#444444" Margin="0,4,0,0"/>
-      <TextBlock Name="check" TextWrapping="Wrap" Foreground="#555555" Margin="0,6,0,0"/>
-      <TextBlock Name="script" FontFamily="Consolas" FontSize="13" TextWrapping="Wrap" Foreground="Gray" Margin="0,4,0,0"/>
+      <TextBlock Name="desc" TextWrapping="Wrap" Foreground="#444444" Margin="0,2,0,0"/>
+      <TextBlock Name="script" FontFamily="Consolas" FontSize="13" TextWrapping="Wrap" Foreground="Gray" Margin="0,2,0,0"/>
     </StackPanel>
     <StackPanel Grid.Column="2" VerticalAlignment="Center" Margin="0,0,8,0">
       <TextBlock Name="status" FontWeight="SemiBold" TextWrapping="Wrap"/>
       <TextBlock Name="statusDetail" Foreground="Gray" FontSize="13" TextWrapping="Wrap"/>
     </StackPanel>
     <StackPanel Grid.Column="3" Orientation="Horizontal" VerticalAlignment="Center">
-      <Button Name="run" Content="Run step" Width="125" Height="34" Margin="0,0,6,0" FontWeight="SemiBold"/>
-      <Button Name="confirm" Content="Check and confirm" Width="155" Height="34"/>
+      <Button Name="run" Content="Run" Width="100" Height="34" Margin="0,0,6,0" FontWeight="SemiBold"/>
+      <Button Name="open" Content="Open script" Width="110" Height="34"/>
     </StackPanel>
   </Grid>
 </Border>
 '@
 $Brush = New-Object Windows.Media.BrushConverter
 $Colors = @{
-    Done      = $Brush.ConvertFromString("#107C10")
-    NotDone   = $Brush.ConvertFromString("#605E5C")
-    Attention = $Brush.ConvertFromString("#8A6100")
-    Running   = $Brush.ConvertFromString("#0B5394")
-    Failed    = $Brush.ConvertFromString("#A4262C")
+    Done=$Brush.ConvertFromString('#107C10'); NotDone=$Brush.ConvertFromString('#605E5C')
+    Attention=$Brush.ConvertFromString('#8A6100'); Running=$Brush.ConvertFromString('#0B5394'); Failed=$Brush.ConvertFromString('#A4262C')
 }
+$StateText = @{ Done='Done'; NotDone='Not started'; Attention='Needs attention'; Running='Running'; Failed='Failed' }
 try { $window = [Windows.Markup.XamlReader]::Load([Xml.XmlNodeReader]::new($xaml)) }
-catch { Write-Host "Graphical console could not create a window: $($_.Exception.Message). No configuration was run." -ForegroundColor Red; exit 1 }
+catch { Write-Host "Console window failed: $($_.Exception.Message). No configuration was run." -ForegroundColor Red; exit 1 }
 $ui = @{}
 $xaml.SelectNodes('//*[@Name]') | ForEach-Object { $ui[$_.Name] = $window.FindName($_.Name) }
 $window.Title = "3. ALF Lab Builder - $roleTitle Console"
-$ui.txtTitle.Text = "3. ALF Lab Builder - $roleTitle Console"
+$ui.txtTitle.Text = $window.Title
 $ui.txtVersion.Text = "v$ALFVersion"
-$ui.txtMachine.Text = "Role: $Role | THIS guest: $env:COMPUTERNAME | Scripts: $Here"
+$ui.txtMachine.Text = "$env:COMPUTERNAME | $roleTitle | Scripts: $Here"
+$ui.txtNext.Text = $next
+if ($Role -eq 'Node') { $ui.btnDisplay.Visibility = 'Collapsed' }
 $count = 0
 foreach ($task in $Tasks) {
     $count++
     $row = [Windows.Markup.XamlReader]::Parse($RowXaml)
     $card = @{}
-    foreach ($name in 'numBack','num','title','why','learn','check','script','run','confirm','status','statusDetail') { $card[$name] = $row.FindName($name) }
+    foreach ($name in 'numBack','num','title','desc','script','run','open','status','statusDetail') { $card[$name]=$row.FindName($name) }
     $card.num.Text = "$count"
     $card.title.Text = $task.Title
-    $card.why.Text = "WHY: $($task.Why)"
-    $card.learn.Text = $task.Learn
-    $card.check.Text = "CHECK AFTERWARD: $($task.Check)"
-    $card.script.Text = if ($task.Script) { "Script: $($task.Script) | Prerequisites: $($task.Needs -join ', ')" } else { 'Manual checkpoint - no configuration command is run' }
+    $card.desc.Text = $task.Text
+    $card.script.Text = $task.Script
     $id = $task.Id
+    $path = Join-Path $Here $task.Script
     $card.run.Add_Click({ Start-GuestStep $id }.GetNewClosure())
-    $card.confirm.Add_Click({ Confirm-GuestStep $id }.GetNewClosure())
+    $card.open.Add_Click({ Start-Process notepad.exe -ArgumentList "`"$path`"" }.GetNewClosure())
     $script:Cards[$id] = $card
     $ui.panelTasks.Children.Add($row) | Out-Null
 }
 $ui.btnRefresh.Add_Click({ Refresh-GuestStatus })
 $ui.btnFolder.Add_Click({ Start-Process explorer.exe -ArgumentList "`"$Here`"" })
+$ui.btnDisplay.Add_Click({
+    try {
+        Write-GuestLog (Set-ALFGuestDisplayResolution $Role)
+        $work = [Windows.SystemParameters]::WorkArea
+        $window.Width = [Math]::Min(1300, $work.Width)
+        $window.Height = [Math]::Min(850, $work.Height)
+    }
+    catch {
+        $message = "Optional display change skipped: $($_.Exception.Message)"
+        Write-GuestLog $message
+        [Windows.MessageBox]::Show($window, $message, 'Display setting', 'OK', 'Warning') | Out-Null
+    }
+})
 $timer = New-Object Windows.Threading.DispatcherTimer
-$timer.Interval = [TimeSpan]::FromSeconds(3)
+$timer.Interval = [TimeSpan]::FromSeconds(10)
 $timer.Add_Tick({ Refresh-GuestStatus })
 $window.Add_Closing({
     param($sender, $e)
     if (@($script:Processes.Values | Where-Object { -not $_.HasExited }).Count) {
-        if ([Windows.MessageBox]::Show($window, 'A step window is still running. Closing this console does not stop it. Close the console anyway?', 'Step still running', 'YesNo', 'Warning') -ne 'Yes') { $e.Cancel=$true }
+        if ([Windows.MessageBox]::Show($window, 'A step is still running. Closing this console does not stop it. Close anyway?', 'Step still running', 'YesNo', 'Warning') -ne 'Yes') { $e.Cancel=$true }
     }
 })
 $work = [Windows.SystemParameters]::WorkArea
 $window.Width = [Math]::Min($window.Width, $work.Width)
 $window.Height = [Math]::Min($window.Height, $work.Height)
-Write-GuestLog "Opened $roleTitle guide on $env:COMPUTERNAME. Confirm the role and read each step before running."
+Write-GuestLog 'Status is detected from this guest. Reopen the console after any restart.'
 Refresh-GuestStatus
 $timer.Start()
 try { $window.ShowDialog() | Out-Null } finally { $timer.Stop() }

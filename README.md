@@ -1,4 +1,4 @@
-﻿# ALF Lab Builder v2.0.14
+# ALF Lab Builder v2.0.16
 
 A guided, script-based way to build a **nested Azure Local lab inside a single Azure VM**:
 a domain controller, an admin station and a 2-node Azure Local cluster, all running as
@@ -11,7 +11,7 @@ It has consoles at each level of the lab:
 - **2. ALF Lab Builder - Host Console** (on the lab host VM) runs the host-side steps for you and
   downloads the two install images with a progress bar.
 - **3. ALF Lab Builder - Guest Consoles** (inside the DC, admin station and each node) guide
-  role-specific configuration and record the student's checks.
+  role-specific setup and detect configuration progress automatically.
 
 Every
 script explains what it's doing and why (look for the `LEARN:` notes), so the lab doubles
@@ -26,7 +26,7 @@ as a training exercise.
 
 The local development folder contains `ALF-Lab-Build-Guide-v1.0.24.docx`, covering the lab platform,
 cluster deployment, challenges and troubleshooting. The guide is not included in this repository
-pending privacy review. A matching 2.0.14 guide remains pending.
+pending privacy review. A matching 2.0.16 guide remains pending.
 
 ## What you get
 
@@ -67,7 +67,7 @@ Azure VM (super-host, Hyper-V)
    `LabValues.json`, generated `Rollout` files and console progress are ignored by Git; keep them local.
 2. **Open the Planning Console:** double-click `Launch-ALFLabBuilder.cmd`.
 3. **Choose your Cluster identifier** at the top of the Planning Console, then click **Apply identifier**.
-   Saved plans retain their chosen identifier when upgrading; version changes do not rename the lab. If a plan has no identifier, the release-derived default is `2014` for 2.0.14 (2.0.14). Choose exactly four digits meaningful to you; leading zeros such as `0042` are kept.
+   Saved plans retain their chosen identifier when upgrading; version changes do not rename the lab. If a plan has no identifier, the release-derived default is `2015` for 2.0.16 (2.0.16). Choose exactly four digits meaningful to you; leading zeros such as `0042` are kept.
    **Apply identifier** updates all eleven numbered lab names and refreshes the commands; typing alone does not apply a change.
    Fill in at least your **Tenant ID** and **Subscription ID** (group 1, "Getting started"). Key vault and storage account names must still be globally unique across Azure; a four-digit identifier alone does not guarantee availability.
    Select **Check values** until everything shows OK, then **Save values** to keep your identifier and plan.
@@ -107,7 +107,7 @@ the domain controller (ContosoDC1: 06dc, 07dc, 08dc, 09dc, plus 04dc, which crea
 and `adm` for the admin station (08adm, plus 04adm, which creates it on the host). In File Explorer
 `08adm` sorts above `08dc`; run 08dc first, because 08adm needs the domain controller finished.
 
-Every script checks before it acts and is **safe to run again**.
+Revisit setup only when needed. **Node configuration clears data disks; do not rerun it on deployed nodes.**
 
 ### Section 2: SuperHost and guest allocations
 
@@ -175,23 +175,25 @@ To add a value: add an entry to `LabValues.json`, then put `{{YourKey}}` in the 
 
 After **Roll out scripts**, copy the complete rollout to the host's `C:\ISO`. Host step **05** delivers the DC/admin consoles with their scripts; host step **11** delivers the node console to each node alongside its own generated configure script.
 
-| Guest | Launcher in `C:\ISO` | Guided order |
+| Guest | Launcher in `C:\ISO` | Runnable setup steps |
 |---|---|---|
-| Domain controller | `Launch-ALFDCConsole.cmd` | Windows setup checkpoint -> 06dc name/network -> 07dc forest/promotion -> 08dc DNS/DHCP -> 09dc cluster OU and LCM account |
-| Admin station | `Launch-ALFAdminConsole.cmd` | DC readiness checkpoint -> 08adm network, management tools, name and domain join -> domain sign-in/management checkpoint |
-| Each Azure Local node | `Launch-ALFNodeConsole.cmd` | OS/host step 11 checkpoint -> 12 node configuration -> Azure/other-node prerequisite checkpoint -> 14 Arc registration -> policy/portal handoff |
+| Domain controller | `Launch-ALFDCConsole.cmd` | 06dc name/network -> 07dc domain -> 08dc DNS/optional DHCP -> 09dc AD preparation module |
+| Admin station | `Launch-ALFAdminConsole.cmd` | 08adm networking, management tools and domain join |
+| Each Azure Local node | `Launch-ALFNodeConsole.cmd` | 12 node configuration -> 14 Arc registration |
 
-These are three role-specific graphical views of the shared `ALFGuestConsole.ps1`, with `ALFGuestStepRunner.ps1` running a selected script in a separate PowerShell window. Each step explains **why**, **what changes**, **prerequisites**, **restart behavior**, and **checks afterward**. Existing scripts are not split or run automatically: 08adm and 12 still perform their multiple stages in one script. **Node step 12 cleans eligible data disks and removes old storage pools; read its destructive-operation warning carefully.**
+These are compact role-specific views of `ALFGuestConsole.ps1`: a short description, detected status, **Run** and **Open script**. `ALFGuestStepRunner.ps1` runs the selected script in its own PowerShell window. Nothing runs automatically; existing credential prompts and configuration stages are unchanged. **Node step 12 clears eligible data disks and removes storage pools**, so it retains a dedicated warning. Its Run button is disabled when existing cluster membership is detected.
 
-All three guest views use the Host Console theme: blue headings and version badge, white step cards, numbered blue circles that turn green only after **student confirmation**, a separate status column and right-hand action buttons. Running status is blue; unresolved results are amber; script errors are red. Text labels remain visible so color is not the only indicator. A successful script return alone never turns a circle green.
+The Host Console theme is retained: blue headers, white cards, green detected completion, blue running status, amber attention and red failures. **No student confirmation is needed.** Read-only checks inspect this guest's actual name/network, domain/services, DNS/optional DHCP, management tools, node preparation or Arc bootstrap/agent connection. Successful script exit and old confirmations are not completion proof. The AD tools card checks module installation only; optional OU/account creation is not claimed complete.
 
-**Refreshing an existing guest:** v2.0.14 accepts saved progress from v2.0.7/v2.0.8/v2.0.9/v2.0.10/v2.0.11/v2.0.12 for the same role. Close the guest console and deliver the matching v2.0.14 files to its `C:\ISO`, retaining its `ALFGuestConsole-<Role>-State.json` and execution receipts. Host step 05 can redeliver DC/admin files and step 11 can redeliver each node's correct files, or copy the matching role files manually. Do not copy a different node's configure script or rerun destructive node configuration merely to update the console's appearance.
+**Refreshing an existing guest:** close the console, replace the host's `C:\ISO` with the complete matching rollout and retain `ALFHostConsole-Nodes.json`. Rerun **Host Console step 8** (script 05) for DC/admin and **step 10** (script 11) for nodes. Keep guest state/receipts; same-role v2.0.7 through v2.0.15 execution metadata is retained, but old confirmations are ignored. Deliver `ALFGuestStatus.ps1` and `ALFGuestDisplay.ps1` with the console/runner and role scripts. Node delivery now verifies seven required files. Never copy another node's configure script or rerun destructive guest setup merely to refresh the UI.
 
-**DC desktop shortcut:** host script `05.Host-CopyScriptsToVM.ps1` creates `C:\Users\Administrator\Desktop\ALF DC Console.lnk` inside ContosoDC1, pointing directly to `C:\ISO\Launch-ALFDCConsole.cmd`. This targets the local Administrator's default desktop, not a domain account's separate profile or the host desktop. Rerunning host step 05 refreshes the shortcut without running DC configuration. If shortcut delivery fails, a warning is shown and the launcher remains accessible in `C:\ISO`.
+**DC and admin desktop shortcuts:** host script `05.Host-CopyScriptsToVM.ps1` creates `ALF DC Console.lnk` inside ContosoDC1 and `ALF Admin Console.lnk` inside the planned admin VM (normally ContosoADM1), both on `C:\Users\Administrator\Desktop`. They point directly to `C:\ISO\Launch-ALFDCConsole.cmd` and `C:\ISO\Launch-ALFAdminConsole.cmd`, respectively. These target the local Administrator's default desktop, not a domain account's separate profile or the host desktop. Rerunning host step 05 refreshes both shortcuts without running guest configuration. If shortcut delivery fails, a warning is shown and the matching launcher remains accessible in `C:\ISO`.
 
-Choose **Run step**, answer that script's credential/sign-in prompts, and check its output. After any required restart, sign back in and reopen the same launcher. Choose **Check and confirm** only after personally verifying the listed results. The console distinguishes **Running**, **Script returned - check result**, **Last run failed**, **Interrupted / restarted - check result**, and **Student confirmed**. A successful script exit is not proof of correct configuration. Prerequisites are gated by student confirmations, and rerunning a step clears downstream confirmations. Cross-VM and Azure prerequisites are explicit student checkpoints, not automatic health claims.
+Choose **Run**, answer the script's prompts, then close its PowerShell window when finished. Status refreshes automatically every ten seconds or with **Refresh status**. After a restart, sign in and reopen the same launcher; pending name changes show **Restart required**. Incomplete preceding setup produces a Host Console-style warning with **Run anyway**, not confirmation checkpoints. Probe failures and interrupted/failed runs remain visible.
 
-Role-specific state (`ALFGuestConsole-<Role>-State.json`) and per-run execution receipts stay beside the scripts and contain no credentials. Reopening the console preserves progress and recognizes an already-running step by process identity. Closing the console does not stop its script. Do not copy a node-specific configure script or another machine's state into a different node. The last node checkpoint means ready for workstation policy review and portal deployment, **not** that a cluster was deployed.
+Role-specific state (`ALFGuestConsole-<Role>-State.json`) and execution receipts remain beside the scripts; no credentials are added. Running processes are restored only when both PID and start time match. Closing the console does not stop its script. The short handoff note does not verify another VM, Azure Policy/RBAC or deployment. Cluster-owned disks are not expected to remain RAW; detected lab-cluster membership protects them from setup reruns without claiming cluster/storage health.
+
+**DC/admin display:** choose **1600 x 900 display** to set the current desktop session when the adapter supports it. Windows tests the mode before applying it and the console verifies the resulting size. Unsupported modes or RDP/VMConnect enhanced-session control produce a warning without failing setup; select the resolution in the connection client instead. This button is not shown on nodes and changes no host VM video settings.
 
 **GUI compatibility trial:** at your request, all three roles attempt WPF. Azure Local/Server Core installations may lack the required WPF components. Start from SConfig option 15: `cd C:\ISO`, then `.\Launch-ALFNodeConsole.cmd`. If WPF cannot load/create a window, the console reports the problem and runs no configuration; report that result and use the numbered scripts individually. No GUI features are installed automatically. New guest launchers do not bypass execution policy or unblock files. If execution is blocked, follow your organization's approved script-signing process rather than weakening Windows protections.
 
@@ -215,11 +217,11 @@ It asks for administrator rights and expects to run from `C:\ISO`, with the roll
 
 - **Step 9 node names:** edit **First node name** and **Second node name**, then click **Apply node names** before Run. For example, change `AzL2001Node1` / `AzL2001Node2` to `AzL2001Node3` / `AzL2001Node4`. Both node steps are disabled while edits are unapplied. Names must be distinct, 1-15 letters/digits/hyphens, start with a letter/digit, and not be entirely numeric; they cannot match the host, DC or admin station.
 - The applied pair is saved on the host in `ALFHostConsole-Nodes.json` beside the scripts. **Steps 9 and 10**, their status checks, and scripts 10/11 run manually all use it. Script 11 generates each node's configure script with the selected name. The first field retains the first planned node IP; the second retains the second IP. This remains a two-node lab, not an add-two-more-nodes feature.
-- **Step 10 destinations and console:** the card shows the two applied VM names and the files copied to `C:\ISO` **inside each selected VM**. Look for `Launch-ALFNodeConsole.cmd`, `ALFGuestConsole.ps1`, `ALFGuestStepRunner.ps1`, `12.Node-Configure.ps1` and `14.Node-ArcRegister.ps1`. There is no standalone `ALFNodeConsole.ps1`; the launcher opens the shared console with `-Role Node`.
+- **Step 10 destinations and console:** the card shows the two applied VM names and the files copied to `C:\ISO` **inside each selected VM**. Look for `Launch-ALFNodeConsole.cmd`, `ALFGuestConsole.ps1`, `ALFGuestStepRunner.ps1`, `ALFGuestStatus.ps1`, `ALFGuestDisplay.ps1`, `12.Node-Configure.ps1` and `14.Node-ArcRegister.ps1`. There is no standalone `ALFNodeConsole.ps1`; the launcher opens the shared console with `-Role Node`.
 - Step 10 uses PowerShell Direct to verify every delivered file's SHA-256 against the host copy. Missing/stopped VMs, failed guest sign-in, adapter errors, copy failures or missing/mismatched guest files make the step fail, with per-VM results. A verified-delivery receipt is saved to `C:\ISO\Generated\<VMName>\ALFNodeDelivery.json` **on the host** only after verification. The Host Console no longer treats a generated host script as proof of delivery. Status reports the last verification time; it is not continuous monitoring of guest files. If files disappear later, rerun step 10 to verify/deliver again. Old generated folders without receipts require a rerun.
 - **v2.0.14 fixes a false duplicate-destination error** in step 10 even with zero extra files. Refresh the host scripts and rerun step 10; do not delete NodeFiles contents merely because an older version reported a duplicate. A genuine collision now names the guest path and both source files.
 - When troubleshooting, keep the complete current rollout in host `C:\ISO`, retain `ALFHostConsole-Nodes.json`, check the applied VM names in step 9, then rerun step 10 and read its per-VM summary. Do not rerun guest configuration step 12 merely to obtain the console; that step can clean data disks.
-- Applying does **not** rename/delete existing VMs, change the Planning Console plan, or change cluster/resource names. Node run history is tied to the selected pair. To revert, re-enter the planned names and Apply (or close the console and remove `ALFHostConsole-Nodes.json`). Keep this host-local file when refreshing rollout files. The v2.0.14 helper `ALFNodeSettings.ps1` must be copied with the host scripts.
+- Applying does **not** rename/delete existing VMs, change the Planning Console plan, or change cluster/resource names. Node run history is tied to the selected pair. To revert, re-enter the planned names and Apply (or close the console and remove `ALFHostConsole-Nodes.json`). Keep this host-local file when refreshing rollout files. The v2.0.16 helper `ALFNodeSettings.ps1` must be copied with the host scripts.
 - **Run** opens the script in its own PowerShell window, so you can read its output and answer its
   questions. The console marks the step done when the window closes.
 - **Status** is read from the host itself (is `F:` there, is Hyper-V installed, does the VM exist),
@@ -264,4 +266,4 @@ without typing it. Leave it empty and script 12 asks for it on each node instead
 
 ## Version
 
-**2.0.14** - see `CHANGELOG.md`. The version is shown at the top of the Lab Builder window, in `VERSION.txt`, in the zip file name and in the header of every script (`# Version: ALF Lab Builder x.y.z`), so a single file copied in on its own can be identified. **Roll out scripts** warns about any script from a different version. It goes up with every change.
+**2.0.16** - see `CHANGELOG.md`. The version is shown at the top of the Lab Builder window, in `VERSION.txt`, in the zip file name and in the header of every script (`# Version: ALF Lab Builder x.y.z`), so a single file copied in on its own can be identified. **Roll out scripts** warns about any script from a different version. It goes up with every change.

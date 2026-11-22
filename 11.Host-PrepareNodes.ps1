@@ -1,5 +1,5 @@
 ﻿##############################################################
-# Version: ALF Lab Builder 2.0.14   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.0.16   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # 11.Host-PrepareNodes.ps1
 # Prepares every node from the host, after the Azure Local OS is installed on them:
 #   A. Renames the NICs inside each node to match Hyper-V (1-MGMTCOMP1, 2-MGMTCOMP2, ...)
@@ -32,7 +32,7 @@ $AdapterNames = @("1-MGMTCOMP1", "2-MGMTCOMP2", "3-STORAGE1", "4-STORAGE2")
 #Files
 $ScriptFolder   = "C:\ISO"                       #where the lab scripts are on the host
 $Template       = "C:\ISO\12.Node-Configure.ps1" #the per-node template (has __NODENAME__ / __NODEIP__)
-$CommonFiles    = @("14.Node-ArcRegister.ps1", "ALFGuestConsole.ps1", "ALFGuestStepRunner.ps1", "Launch-ALFNodeConsole.cmd")   #shared scripts and guided node console
+$CommonFiles    = @("14.Node-ArcRegister.ps1", "ALFGuestConsole.ps1", "ALFGuestStepRunner.ps1", "ALFGuestStatus.ps1", "ALFGuestDisplay.ps1", "Launch-ALFNodeConsole.cmd")   #shared scripts and guest console
 $ExtraFolder    = "C:\ISO\NodeFiles"             #OPTIONAL: anything you drop in here goes to every node too
 $GeneratedRoot  = "C:\ISO\Generated"             #host copy of each node's filled-in files (for reference)
 $GuestFolder    = "C:\ISO"                       #where files land INSIDE each node

@@ -1,5 +1,5 @@
 ﻿##############################################################
-# Version: ALF Lab Builder 2.0.14   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.0.16   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # 05.Host-CopyScriptsToVM.ps1
 # Copies lab scripts from the host into a VM (no clipboard or network needed)
 #
@@ -22,7 +22,7 @@ $GuestLaunchers = @{
     "ContosoDC1" = "Launch-ALFDCConsole.cmd"
     "{{AdminStationName}}" = "Launch-ALFAdminConsole.cmd"
 }
-$ConsoleFiles = @("ALFGuestConsole.ps1", "ALFGuestStepRunner.ps1")
+$ConsoleFiles = @("ALFGuestConsole.ps1", "ALFGuestStepRunner.ps1", "ALFGuestStatus.ps1", "ALFGuestDisplay.ps1")
 
 $SourceFolder = "C:\ISO"     #where the scripts are on the host
 $GuestFolder  = "C:\ISO"     #where they go inside the VM
@@ -35,25 +35,32 @@ if ("$($CopyPlan.Keys)" -match '\{\{') {
     throw "This script still has placeholders ({{...}}). Open the Planning Console (Launch-ALFLabBuilder.cmd), fill in the values, and use 'Roll out scripts'."
 }
 
-function Copy-ALFDCConsoleShortcut([string]$VMName, [string]$GuestFolder) {
-    $temp = Join-Path ([IO.Path]::GetTempPath()) ('ALF-DC-Console-' + [guid]::NewGuid().ToString('N') + '.lnk')
+function Copy-ALFGuestConsoleShortcut {
+    param(
+        [string]$VMName,
+        [string]$GuestFolder,
+        [ValidateSet('Launch-ALFDCConsole.cmd', 'Launch-ALFAdminConsole.cmd')][string]$Launcher
+    )
+    $consoleName = if ($Launcher -eq 'Launch-ALFDCConsole.cmd') { 'DC' } else { 'Admin' }
+    $description = if ($consoleName -eq 'DC') { 'Open the ALF Lab Builder Domain Controller Console' } else { 'Open the ALF Lab Builder Admin Station Console' }
+    $temp = Join-Path ([IO.Path]::GetTempPath()) ('ALF-' + $consoleName + '-Console-' + [guid]::NewGuid().ToString('N') + '.lnk')
     $shell = $null
     $shortcut = $null
     try {
         $shell = New-Object -ComObject WScript.Shell
         $shortcut = $shell.CreateShortcut($temp)
-        $shortcut.TargetPath = Join-Path $GuestFolder 'Launch-ALFDCConsole.cmd'
+        $shortcut.TargetPath = Join-Path $GuestFolder $Launcher
         $shortcut.WorkingDirectory = $GuestFolder
-        $shortcut.Description = 'Open the ALF Lab Builder Domain Controller Console'
+        $shortcut.Description = $description
         $shortcut.IconLocation = 'C:\Windows\System32\shell32.dll,18'
         $shortcut.Save()
         Set-Content -LiteralPath $temp -Stream Zone.Identifier -Value '[ZoneTransfer]', 'ZoneId=3' -ErrorAction Stop
-        $destination = 'C:\Users\Administrator\Desktop\ALF DC Console.lnk'
+        $destination = "C:\Users\Administrator\Desktop\ALF $consoleName Console.lnk"
         Copy-VMFile -Name $VMName -SourcePath $temp -DestinationPath $destination -CreateFullPath -FileSource Host -Force -ErrorAction Stop
-        Write-Host "  DC desktop shortcut: $destination -> $($shortcut.TargetPath)" -ForegroundColor Green
+        Write-Host "  $consoleName desktop shortcut: $destination -> $($shortcut.TargetPath)" -ForegroundColor Green
     }
     catch {
-        Write-Warning "DC desktop shortcut was not created: $($_.Exception.Message). The console can still be opened from $GuestFolder\Launch-ALFDCConsole.cmd."
+        Write-Warning "$consoleName desktop shortcut was not created: $($_.Exception.Message). The console can still be opened from $GuestFolder\$Launcher."
     }
     finally {
         if ($shortcut -and [Runtime.InteropServices.Marshal]::IsComObject($shortcut)) { [void][Runtime.InteropServices.Marshal]::FinalReleaseComObject($shortcut) }
@@ -88,10 +95,10 @@ foreach ($VMName in $CopyPlan.Keys) {
             -DestinationPath (Join-Path $GuestFolder $Script.Name) `
             -CreateFullPath -FileSource Host -Force
     }
-    if ($VMName -eq 'ContosoDC1') { Copy-ALFDCConsoleShortcut $VMName $GuestFolder }
+    Copy-ALFGuestConsoleShortcut $VMName $GuestFolder ($GuestLaunchers[$VMName])
 }
 
 Write-Host "Done. Inside the VM the scripts are in $GuestFolder" -ForegroundColor Green
-Write-Host "On the DC: use the ALF DC Console shortcut on local Administrator's desktop, or Launch-ALFDCConsole.cmd. On the admin station: Launch-ALFAdminConsole.cmd." -ForegroundColor Green
-Write-Host "Each guide explains the order, restarts and checks. Confirm results before the next step." -ForegroundColor Green
+Write-Host "On the DC: use the ALF DC Console shortcut on local Administrator's desktop, or Launch-ALFDCConsole.cmd. On the admin station: use the ALF Admin Console shortcut on local Administrator's desktop, or Launch-ALFAdminConsole.cmd." -ForegroundColor Green
+Write-Host "Guest consoles detect progress automatically. Reopen the same console after any restart." -ForegroundColor Green
 ################

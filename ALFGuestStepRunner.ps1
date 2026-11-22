@@ -1,4 +1,4 @@
-﻿# Version: ALF Lab Builder 2.0.14
+﻿# Version: ALF Lab Builder 2.0.16
 # Runs one guest configuration step. A receipt records execution, not configuration verification.
 param(
     [Parameter(Mandatory = $true)][string]$ScriptPath,
@@ -21,6 +21,6 @@ finally {
     [ordered]@{ ExitCode = $exitCode; Finished = (Get-Date).ToString('o') } |
         ConvertTo-Json | Set-Content -LiteralPath $ResultPath -Encoding UTF8
 }
-Write-Host 'Return to the guest console and check the result before confirming this step.' -ForegroundColor Cyan
+Write-Host 'The guest console refreshes configuration status automatically. Reopen it after any restart.' -ForegroundColor Cyan
 Read-Host 'Press Enter to close this step window' | Out-Null
 exit $exitCode

@@ -1,4 +1,4 @@
-﻿# ALF Lab Builder v2.0.14 - release checklist
+﻿# ALF Lab Builder v2.0.16 - release checklist
 
 - [ ] Host VM size (SKU) is first in section 2 after load/migration/save; all other field order and values remain unchanged.
 
@@ -17,10 +17,14 @@
 - [ ] Run tests\GuestSizing.Tests.ps1 and tests\HostSizing.Tests.ps1 in an approved STA PowerShell session; preserve existing student values when loading older plans.
 
 
-- [ ] All guest roles match the Host Console: blue headings/version badge, numbered blue/green indicators, white cards, status column and right-hand actions. Only student-confirmed steps turn green; running is blue, results needing checks amber and script errors red.
-- [ ] Retain each role's v2.0.7/v2.0.8 progress in v2.0.14 without losing confirmations/receipts. Reject other-role or unsupported-release state; keep explicit confirmation and restart behavior. Check layout at 1024- and 1300-pixel window widths.
-- [ ] Host step 05 creates ALF DC Console.lnk on the DC local Administrator's default desktop, targeting C:\ISO\Launch-ALFDCConsole.cmd. Retry updates the shortcut without reconfiguring the DC; failures warn and the temporary host shortcut is removed.
-- [ ] Run tests\GuestConsole.Tests.ps1 in an approved STA PowerShell session; no guest configuration should be launched.
+- [ ] Guest consoles have only runnable cards (DC 4, Admin 1, Node 2), concise descriptions, detected status and Run/Open script; keep the Host Console green/blue theme. No manual readiness/confirmation cards remain.
+- [ ] Same-role v2.0.7 through v2.0.15 state retains process/receipt metadata, not old confirmation proof. Reject unsupported role/schema; verify PID plus UTC start time and visible launch/probe/receipt failures. Check compact layout at 1024- and 1300-pixel window widths.
+- [ ] Actual settings, not exit code alone, determine Done: DC identity/domain/DNS/optional DHCP; Admin identity/domain/tools; generated node identity/network/admin/storage; successful Arc bootstrap plus connected agent at the planned target. DC networking stays done after self-DNS configuration.
+- [ ] DC AD tools card checks module installation only; optional OU/account exercise and cross-VM/Azure/deployment prerequisites are not claimed verified.
+- [ ] Node setup retains a destructive confirmation. Existing cluster membership disables rerun; deployed lab storage need not remain RAW. An unknown/failed cluster lookup must not allow disk cleanup.
+- [ ] **[untested on guests]** DC/Admin 1600 x 900 button applies a supported desktop mode; unsupported/client-controlled sessions warn without failing setup. Button is absent on nodes; do not change the validation workstation's display.
+- [ ] Host step 05 creates ALF DC Console.lnk on the DC local Administrator's desktop and ALF Admin Console.lnk on the planned admin VM local Administrator's desktop, targeting their matching C:\ISO launchers. Retry updates both shortcuts without reconfiguring guests; failures warn and temporary host shortcuts are removed. Verify the existing DC shortcut remains unchanged.
+- [ ] Run tests\GuestConsole.Tests.ps1, tests\GuestStatus.Tests.ps1 and tests\GuestDisplay.Tests.ps1 normally in an approved STA PowerShell session; all guest queries/display changes are mocked.
 
 
 - [ ] Section 2 accepts 20 / 48 max without refreshing Azure and with missing/unlisted reduced-count metadata; show warnings and retain --v-cpus-available 20 through copy and rollout.
@@ -30,7 +34,7 @@
 
 - [ ] Host Console step 1 and each guest role: any unavailable time-zone ID falls back to Eastern Standard Time. Missing Eastern, time-zone lookup failure and Set-TimeZone failure only warn and continue. Verify valid/already-selected zones and blank values; actual disk/folder errors must still fail. Run tests\GuestTimeZone.Tests.ps1 in an approved PowerShell session without running destructive node configuration solely to test display time.
 
-- [ ] Step 10 accepts all five normal hashtable delivery entries with zero extras and a unique extra file. A case-insensitive duplicate destination must report the exact path and both sources.
+- [ ] Step 10 accepts all seven normal hashtable delivery entries with zero extras and a unique extra file. Both status/display helpers require matching guest hashes; stale helper receipts stay incomplete. A case-insensitive duplicate destination reports the exact path and both sources.
 
 - [ ] Section 2: default D48als_v7 and 20 available vCPUs; verify whole-number/max checks, nonblocking CPU-support warnings, selection persistence and command/script parameter parity.
 - [ ] Failed queries or changed subscriptions must not falsely claim verified support or block the default 20-vCPU request. Invalid counts or unknown maxima for nondefault SKUs still block copy/rollout. Script 00 uses the same warning policy in its retained ArcRegion; Azure enforces CPU support during creation.
@@ -41,17 +45,17 @@
 - [ ] Host Console step 9: apply Node3/Node4 names, restart the console, and verify the same pair appears in creation, preparation and per-node configure scripts. Original plan/IP order remain unchanged.
 - [ ] Reject duplicate/invalid/reserved names; block both node steps with unapplied edits and prevent changing names during a running host step.
 - [ ] A previous pair's run history must not complete the newly selected pair; existing VMs must not be renamed or deleted.
-- [ ] Copy `ALFNodeSettings.ps1` with all v2.0.14 host files; retain the host-local `ALFHostConsole-Nodes.json` during refresh.
+- [ ] Copy `ALFNodeSettings.ps1` with all v2.0.16 host files; retain the host-local `ALFHostConsole-Nodes.json` during refresh.
 
 Complete these before publishing. Items marked **[untested]** were changed for the release
 and haven't been run end to end yet.
 
 ## Test the release build
 - [ ] **[untested on guests]** Graphical DC/admin/node consoles: WPF loads on the intended guest; if absent, startup reports failure and runs no configuration. Test Azure Local GUI compatibility from SConfig option 15
-- [ ] Rollout contains ALFGuestConsole.ps1, ALFGuestStepRunner.ps1 and three role launchers; host step 05 copies DC/admin launchers and step 11 copies the node launcher plus node-specific configure script
-- [ ] Guest step cards explain purpose, changes, prerequisites, destructive storage actions and restarts; no step runs automatically
-- [ ] Prerequisite confirmations gate execution; a returned script is not marked completed without student checking; rerun clears downstream confirmations
-- [ ] Reopen after restart or console close: progress is preserved, running step is recognized, interrupted step requests result checks, and no credentials enter state/receipts
+- [ ] Rollout contains guest console/runner/status/display helpers and three role launchers; script 05 delivers DC/admin dependencies and script 11 delivers the node dependencies plus its authoritative generated configure script.
+- [ ] Guest setup uses short descriptions and a handoff note; no step runs automatically. Preserve script credential/sign-in/restart prompts and the dedicated destructive warning.
+- [ ] Incomplete detected prerequisites warn with Run anyway. Successful receipts or old confirmations alone never mark Done; reopening after restart probes actual configuration.
+- [ ] Running/interrupted/restart/error status remains visible; state/receipts contain execution metadata only.
 - [ ] Guest launchers/delivery do not unblock files or bypass execution policy; missing, unfilled or version-mismatched scripts are not launched
 - [ ] Section 2: **Azure CLI - create host VM** is immediately after **Azure VM name**; double-click copies a PowerShell-compatible command with the plan's subscription, host RG, VM name and administrator account
 - [ ] Applying a student identifier updates the VM command; missing values show **Fill values**. VM region stays **southcentralus**, size **Standard_D48als_v7**; no password is embedded and **--nsg-rule NONE** keeps inbound RDP closed
@@ -62,7 +66,7 @@ and haven't been run end to end yet.
 - [ ] Invalid/partial/non-ASCII identifiers and unapplied changes block save, command copy/file generation, Azure preparation and rollout; close-and-save stays open
 - [ ] Regenerated rollout uses the applied identifier everywhere; no stale 2105/1024 lab names remain (1024 GB disks are unchanged)
 - [ ] Older plans load without retargeting names; applying a new identifier preserves prefixes/suffixes and nested OU parents
-- [ ] **[untested]** Fresh PC: unblock the files, launch `Launch-ALFLabBuilder.cmd`; the version badge at the top shows *Version 2.0.14*
+- [ ] **[untested]** Fresh PC: unblock the files, launch `Launch-ALFLabBuilder.cmd`; the version badge at the top shows *Version 2.0.16*
 - [ ] **[untested]** Window titles and headings read `1. ALF Lab Builder - Planning Console` and `2. ALF Lab Builder - Host Console`
 - [ ] Tenant ID and Subscription ID show **Missing** until filled in
 - [ ] **Check values** - everything OK once the IDs are entered
@@ -93,7 +97,7 @@ and haven't been run end to end yet.
       `Select-String -Path .\* -Pattern '<your tenant id>','<your subscription id>','<your user name>'`
 - [ ] No `Rollout` folder, `LabValues.shareable.json`, logs or CSV reports in the package
 - [ ] `LabValues.json` Settings folders are empty and the second local admin password is empty
-- [ ] **[pending]** Update the source guide `ALF-Lab-Build-Guide-v1.0.24.docx` with the new identifier workflow, then publish `ALF-Lab-Build-Guide-v2.0.14.docx` with matching title page, page header and Appendix D. Saved plans retain their chosen four-digit identifier; missing identifiers default to 2014.
+- [ ] **[pending]** Update the source guide `ALF-Lab-Build-Guide-v1.0.24.docx` with the new identifier workflow, then publish `ALF-Lab-Build-Guide-v2.0.16.docx` with matching title page, page header and Appendix D. Saved plans retain their chosen four-digit identifier; missing identifiers default to 2015.
 
 ## Version
 - [ ] Version is the same everywhere: Lab Builder (`$ALFVersion`), `LabValues.json`, `VERSION.txt`, README, CHANGELOG, zip and folder name

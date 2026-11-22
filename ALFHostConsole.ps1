@@ -1,5 +1,5 @@
 ﻿##############################################################
-# Version: ALF Lab Builder 2.0.14   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.0.16   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # ALFHostConsole.ps1   -   2. ALF Lab Builder - Host Console
 # The Host Console: a window on the lab host (the Azure VM) that runs the host-side lab
 # steps for you, shows which ones are done, and downloads the two install images with
@@ -22,7 +22,7 @@
 #        It resumes after network drops and keeps going in the background.
 ##############################################################
 
-$ALFVersion = "2.0.14"
+$ALFVersion = "2.0.16"
 
 #Lab VM names - filled in by the Planning Console's "Roll out scripts"
 $DCName            = "ContosoDC1"
@@ -96,13 +96,13 @@ $Tasks = @(
         Text  = "Creates $AdminStationName with {{AdminVcpus}} vCPUs / {{AdminMemoryGB}} GB static RAM from the evaluation VHDX with Hyper-V Time Synchronization disabled. Then connect to it, finish Windows setup and sign in once." }
     [pscustomobject]@{ Id = "Copy";     Kind = "Script";   Script = "05.Host-CopyScriptsToVM.ps1"; Args = ""; Needs = @("DC", "Admin")
         Title = "Copy the scripts into the DC and admin station"
-        Text  = "Disables Hyper-V Time Synchronization on the DC/admin VMs and copies scripts and guided guest consoles into C:\ISO inside each VM. After Windows setup, open Launch-ALFDCConsole.cmd on the DC and Launch-ALFAdminConsole.cmd on the admin station." }
+        Text  = "Disables Hyper-V Time Synchronization on the DC/admin VMs and copies scripts and guided guest consoles into C:\ISO inside each VM. Adds an ALF DC Console or ALF Admin Console shortcut to local Administrator's desktop in the corresponding VM. After Windows setup, use the desktop shortcut or the matching launcher in C:\ISO." }
     [pscustomobject]@{ Id = "Nodes";    Kind = "Script";   Script = "10.Host-CreateNodeVMs.ps1"; Args = ""; Needs = @("Disk", "AzureLocalIso", "Switches")
         Title = "Create the Azure Local node VMs"
         Text  = "Creates $($NodeNames -join ' and ') with Hyper-V Time Synchronization disabled and starts them from the Azure Local ISO. Then install Azure Local on each node." }
     [pscustomobject]@{ Id = "Prepare";  Kind = "Script";   Script = "11.Host-PrepareNodes.ps1"; Args = ""; Needs = @("Nodes")
         Title = "Prepare the nodes"
-        Text  = "Targets the VM names applied in step 9: $($NodeNames -join ' and '). Disables Hyper-V Time Synchronization on each selected VM. Copies into C:\ISO INSIDE each VM: 12.Node-Configure.ps1, 14.Node-ArcRegister.ps1, ALFGuestConsole.ps1, ALFGuestStepRunner.ps1 and Launch-ALFNodeConsole.cmd. The launcher opens the shared ALFGuestConsole in Node mode; there is no separate ALFNodeConsole.ps1. After guest copy verification, open C:\ISO\Launch-ALFNodeConsole.cmd in each VM (SConfig option 15)." }
+        Text  = "Targets the VM names applied in step 9: $($NodeNames -join ' and '). Disables Hyper-V Time Synchronization on each selected VM. Copies into C:\ISO INSIDE each VM: 12.Node-Configure.ps1, 14.Node-ArcRegister.ps1, ALFGuestConsole.ps1, ALFGuestStepRunner.ps1, ALFGuestStatus.ps1, ALFGuestDisplay.ps1 and Launch-ALFNodeConsole.cmd. The launcher opens the shared ALFGuestConsole in Node mode; there is no separate ALFNodeConsole.ps1. After guest copy verification, open C:\ISO\Launch-ALFNodeConsole.cmd in each VM (SConfig option 15)." }
 )
 
 
@@ -285,7 +285,7 @@ function Set-HostNodeNames([string[]]$Names) {
     (Get-Task 'Nodes').Text = "Creates $($NodeNames -join ' and ') with Hyper-V Time Synchronization disabled and starts them from the Azure Local ISO. Then install Azure Local on each node."
     $script:Rows['Nodes'].desc.Text = (Get-Task 'Nodes').Text
     $prepare = Get-Task 'Prepare'
-    $prepare.Text = "Targets the VM names applied in step 9: $($NodeNames -join ' and '). Disables Hyper-V Time Synchronization on each selected VM. Copies into C:\ISO INSIDE each VM: 12.Node-Configure.ps1, 14.Node-ArcRegister.ps1, ALFGuestConsole.ps1, ALFGuestStepRunner.ps1 and Launch-ALFNodeConsole.cmd. The launcher opens the shared ALFGuestConsole in Node mode; there is no separate ALFNodeConsole.ps1. After guest copy verification, open C:\ISO\Launch-ALFNodeConsole.cmd in each VM (SConfig option 15)."
+    $prepare.Text = "Targets the VM names applied in step 9: $($NodeNames -join ' and '). Disables Hyper-V Time Synchronization on each selected VM. Copies into C:\ISO INSIDE each VM: 12.Node-Configure.ps1, 14.Node-ArcRegister.ps1, ALFGuestConsole.ps1, ALFGuestStepRunner.ps1, ALFGuestStatus.ps1, ALFGuestDisplay.ps1 and Launch-ALFNodeConsole.cmd. The launcher opens the shared ALFGuestConsole in Node mode; there is no separate ALFNodeConsole.ps1. After guest copy verification, open C:\ISO\Launch-ALFNodeConsole.cmd in each VM (SConfig option 15)."
     $script:Rows['Prepare'].desc.Text = $prepare.Text
 }
 
