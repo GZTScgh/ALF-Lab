@@ -1,15 +1,21 @@
-﻿# Version: ALF Lab Builder 2.0.16
+﻿# Version: ALF Lab Builder 2.0.21
 # Runs one guest configuration step. A receipt records execution, not configuration verification.
 param(
     [Parameter(Mandatory = $true)][string]$ScriptPath,
-    [Parameter(Mandatory = $true)][string]$ResultPath
+    [Parameter(Mandatory = $true)][string]$ResultPath,
+    [string]$TargetSolutionVersionOverride = ''
 )
 
 $ErrorActionPreference = 'Stop'
 $exitCode = 0
 try {
     $global:LASTEXITCODE = 0
-    & $ScriptPath
+    $stepParameters = @{}
+    if ($TargetSolutionVersionOverride) {
+        if ([IO.Path]::GetFileName($ScriptPath) -ine '14.Node-ArcRegister.ps1') { throw 'A target-version override is only valid for the Arc registration step.' }
+        $stepParameters.TargetSolutionVersionOverride = $TargetSolutionVersionOverride
+    }
+    & $ScriptPath @stepParameters
     if ($LASTEXITCODE -ne 0) { throw "A native command returned exit code $LASTEXITCODE." }
 }
 catch {

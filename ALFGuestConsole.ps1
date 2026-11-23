@@ -1,8 +1,8 @@
-# Version: ALF Lab Builder 2.0.16
+# Version: ALF Lab Builder 2.0.21
 # Shared DC/admin/node console. Completion is detected from this guest.
 param([Parameter(Mandatory = $true)][ValidateSet('DC', 'Admin', 'Node')][string]$Role)
 
-$ALFVersion = '2.0.16'
+$ALFVersion = '2.0.21'
 $Here = $PSScriptRoot
 try {
     Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase -ErrorAction Stop
@@ -61,8 +61,54 @@ function Write-GuestLog([string]$Text) {
     $ui.txtLog.ScrollToEnd()
 }
 function Save-GuestState {
-    [ordered]@{ Role=$Role; Version=$ALFVersion; SchemaVersion=2; Steps=$script:Records } |
-        ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $StateFile -Encoding UTF8 -ErrorAction Stop
+    $state = [ordered]@{ Role=$Role; Version=$ALFVersion; SchemaVersion=2; Steps=$script:Records }
+    if ($Role -eq 'Node') { $state.TargetSolutionVersionOverride = $script:NodeTargetVersion }
+    $temp = $StateFile + '.' + [guid]::NewGuid().ToString('N') + '.tmp'
+    try {
+        $state | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $temp -Encoding UTF8 -ErrorAction Stop
+        # Ordinary $null binds to an empty backup path in Windows PowerShell.
+        if (Test-Path -LiteralPath $StateFile) { [IO.File]::Replace($temp, $StateFile, [NullString]::Value) }
+        else { [IO.File]::Move($temp, $StateFile) }
+    }
+    finally { if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force } }
+}
+function Update-GuestTargetVersionEditor {
+    $busy = @($script:Processes.Values | Where-Object { -not $_.HasExited }).Count -gt 0
+    $dirty = $ui.txtTargetVersion.Text.Trim() -cne $script:NodeTargetVersion
+    $ui.txtTargetVersion.IsEnabled = -not $busy
+    $ui.btnApplyTargetVersion.IsEnabled = -not $busy -and $dirty
+    $script:Cards.Arc.run.IsEnabled = -not $busy -and -not $dirty -and $script:Current.Arc.RunAllowed
+    $script:Cards.Arc.run.ToolTip = if ($dirty) { 'Apply the target version change or restore the saved text before running Arc.' } elseif ($script:Current.Arc.RunAllowed) { 'Run Arc with the displayed target version.' } else { $script:Current.Arc.Detail }
+}
+function Apply-GuestTargetVersion {
+    if (@($script:Processes.Values | Where-Object { -not $_.HasExited }).Count) { Write-GuestLog 'Wait for the current step window to close before changing the target version.'; return }
+    $previous = $script:NodeTargetVersion
+    try {
+        $script:NodeTargetVersion = ConvertTo-ALFGuestTargetVersion $ui.txtTargetVersion.Text
+        Save-GuestState
+        $ui.txtTargetVersion.Text = $script:NodeTargetVersion
+        Write-GuestLog 'Target version saved on this node for the next Arc run. Blank uses the delivered script default; no registration or update was started.'
+    }
+    catch {
+        $script:NodeTargetVersion = $previous
+        $message = "Target version was not saved: $($_.Exception.Message)"
+        Write-GuestLog $message
+        [Windows.MessageBox]::Show($window, $message, 'Target version', 'OK', 'Warning') | Out-Null
+    }
+    Refresh-GuestStatus
+}
+function Set-GuestConsoleDisplay([bool]$ShowWarning = $false) {
+    try {
+        Write-GuestLog (Set-ALFGuestDisplayResolution $Role)
+        $work = [Windows.SystemParameters]::WorkArea
+        $window.Width = [Math]::Min(1300, $work.Width)
+        $window.Height = [Math]::Min(850, $work.Height)
+    }
+    catch {
+        $message = "Optional display restore skipped: $($_.Exception.Message)"
+        Write-GuestLog $message
+        if ($ShowWarning) { [Windows.MessageBox]::Show($window, $message, 'Display setting', 'OK', 'Warning') | Out-Null }
+    }
 }
 function Test-GuestScript($Task) {
     $path = Join-Path $Here $Task.Script
@@ -102,6 +148,32 @@ function Set-GuestCardState($Card, $Check) {
     $Card.statusDetail.Text = $Check.Detail
     $Card.numBack.Background = if ($Check.State -eq 'Done') { $Colors.Done } else { $Colors.Running }
 }
+function Refresh-GuestNodeDetails {
+    try {
+        $ui.txtArcValues.Text = Get-ALFGuestArcSettingsText $Here $script:NodeTargetVersion
+        $ui.txtArcValues.Foreground = $Colors.NotDone
+        $script:ArcValuesError = ''
+    }
+    catch {
+        $message = "Arc values unavailable: $($_.Exception.Message)"
+        $ui.txtArcValues.Text = $message
+        $ui.txtArcValues.Foreground = $Colors.Attention
+        if ($script:ArcValuesError -ne $message) { Write-GuestLog $message }
+        $script:ArcValuesError = $message
+    }
+    try {
+        $ui.txtTimeStatus.Text = Get-ALFGuestTimeStatus
+        $ui.txtTimeStatus.Foreground = $Colors.NotDone
+        $script:TimeStatusError = ''
+    }
+    catch {
+        $message = "Time status unavailable: $($_.Exception.Message)"
+        $ui.txtTimeStatus.Text = $message
+        $ui.txtTimeStatus.Foreground = $Colors.Attention
+        if ($script:TimeStatusError -ne $message) { Write-GuestLog $message }
+        $script:TimeStatusError = $message
+    }
+}
 function Refresh-GuestStatus {
     $busy = @($script:Processes.Values | Where-Object { -not $_.HasExited }).Count -gt 0
     $done = 0
@@ -117,11 +189,19 @@ function Refresh-GuestStatus {
     }
     $ui.btnDisplay.IsEnabled = -not $busy
     $ui.txtProgress.Text = "$done of $($Tasks.Count) steps done"
+    if ($Role -eq 'Node') {
+        Refresh-GuestNodeDetails
+        Update-GuestTargetVersionEditor
+    }
 }
 function Start-GuestStep([string]$Id) {
     $task = $Tasks | Where-Object Id -eq $Id | Select-Object -First 1
     if (-not $task) { throw "Unknown guest step '$Id'." }
     if (@($script:Processes.Values | Where-Object { -not $_.HasExited }).Count) { Write-GuestLog 'Wait for the current step window to close.'; return }
+    if ($Role -eq 'Node' -and $Id -eq 'Arc' -and $ui.txtTargetVersion.Text.Trim() -cne $script:NodeTargetVersion) {
+        Write-GuestLog 'Apply the target version change or restore the saved text before running Arc.'
+        return
+    }
     Refresh-GuestStatus
     $check = $script:Current[$Id]
     if (-not $check.RunAllowed) { Write-GuestLog $check.Detail; return }
@@ -141,6 +221,10 @@ function Start-GuestStep([string]$Id) {
         if (-not (Test-Path -LiteralPath $runner -PathType Leaf)) { throw 'ALFGuestStepRunner.ps1 is missing.' }
         Save-GuestState
         $args = "-NoProfile -STA -File `"$runner`" -ScriptPath `"$(Join-Path $Here $task.Script)`" -ResultPath `"$resultPath`""
+        if ($Role -eq 'Node' -and $Id -eq 'Arc' -and $script:NodeTargetVersion) {
+            $target = ConvertTo-ALFGuestTargetVersion $script:NodeTargetVersion
+            $args += " -TargetSolutionVersionOverride `"$target`""
+        }
         $process = Start-Process powershell.exe -ArgumentList $args -WorkingDirectory $Here -PassThru -ErrorAction Stop
         $script:Processes[$Id] = $process
         $script:Records[$Id].ProcessId = $process.Id
@@ -163,10 +247,17 @@ $script:Records = @{}
 $script:Processes = @{}
 $script:Cards = @{}
 $script:Current = @{}
+$script:ArcValuesError = ''
+$script:TimeStatusError = ''
+$script:NodeTargetVersion = ''
 if (Test-Path -LiteralPath $StateFile) {
     try {
         $saved = Get-Content -LiteralPath $StateFile -Raw -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
         $script:Records = ConvertTo-ALFGuestRecords $saved $Role $ALFVersion @($Tasks | ForEach-Object Id)
+        if ($Role -eq 'Node' -and $saved.PSObject.Properties['TargetSolutionVersionOverride']) {
+            if ($saved.TargetSolutionVersionOverride -isnot [string]) { throw 'Saved node target version must be text.' }
+            $script:NodeTargetVersion = ConvertTo-ALFGuestTargetVersion $saved.TargetSolutionVersionOverride
+        }
         foreach ($id in $script:Records.Keys) {
             $record = $script:Records[$id]
             if ($record.ProcessId -and $record.ProcessStarted) {
@@ -237,6 +328,34 @@ $RowXaml = @'
   </Grid>
 </Border>
 '@
+$NodeDetailsXaml = @'
+<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" Margin="0,2,0,6">
+  <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+  <Border Grid.Column="0" BorderBrush="#DDDDDD" BorderThickness="1" Background="White" CornerRadius="4" Padding="10" Margin="0,0,6,0">
+    <StackPanel>
+      <TextBlock Text="Arc registration values" FontSize="16" FontWeight="SemiBold" Foreground="#0B5394"/>
+      <TextBlock Text="14.Node-ArcRegister.ps1" FontFamily="Consolas" FontSize="13" Foreground="Gray" Margin="0,2,0,4"/>
+      <TextBox Name="txtArcValues" IsReadOnly="True" BorderThickness="0" Background="Transparent" Padding="0"
+               FontFamily="Consolas" FontSize="13" TextWrapping="Wrap"/>
+      <Grid Margin="0,6,0,0">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+        <TextBlock Text="Next run:" FontSize="13" VerticalAlignment="Center" Margin="0,0,6,0"/>
+        <TextBox Name="txtTargetVersion" Grid.Column="1" FontFamily="Consolas" FontSize="13" Height="26" MaxLength="64"
+                 ToolTip="Node-only target version override, such as 12.2602.1002.10. Blank uses the delivered script default."/>
+        <Button Name="btnApplyTargetVersion" Grid.Column="2" Content="Apply" Width="65" Height="26" Margin="6,0,0,0"/>
+      </Grid>
+    </StackPanel>
+  </Border>
+  <Border Grid.Column="1" BorderBrush="#DDDDDD" BorderThickness="1" Background="White" CornerRadius="4" Padding="10" Margin="6,0,0,0">
+    <StackPanel>
+      <TextBlock Text="Time synchronization (NTP/domain)" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" Foreground="#0B5394"/>
+      <TextBlock Text="w32tm /query /status" FontFamily="Consolas" FontSize="13" Foreground="Gray" Margin="0,2,0,4"/>
+      <TextBox Name="txtTimeStatus" IsReadOnly="True" BorderThickness="0" Background="Transparent" Padding="0"
+               FontFamily="Consolas" FontSize="13" TextWrapping="Wrap"/>
+    </StackPanel>
+  </Border>
+</Grid>
+'@
 $Brush = New-Object Windows.Media.BrushConverter
 $Colors = @{
     Done=$Brush.ConvertFromString('#107C10'); NotDone=$Brush.ConvertFromString('#605E5C')
@@ -270,21 +389,17 @@ foreach ($task in $Tasks) {
     $script:Cards[$id] = $card
     $ui.panelTasks.Children.Add($row) | Out-Null
 }
+if ($Role -eq 'Node') {
+    $details = [Windows.Markup.XamlReader]::Parse($NodeDetailsXaml)
+    foreach ($name in 'txtArcValues','txtTimeStatus','txtTargetVersion','btnApplyTargetVersion') { $ui[$name] = $details.FindName($name) }
+    $ui.txtTargetVersion.Text = $script:NodeTargetVersion
+    $ui.txtTargetVersion.Add_TextChanged({ Update-GuestTargetVersionEditor })
+    $ui.btnApplyTargetVersion.Add_Click({ Apply-GuestTargetVersion })
+    $ui.panelTasks.Children.Add($details) | Out-Null
+}
 $ui.btnRefresh.Add_Click({ Refresh-GuestStatus })
 $ui.btnFolder.Add_Click({ Start-Process explorer.exe -ArgumentList "`"$Here`"" })
-$ui.btnDisplay.Add_Click({
-    try {
-        Write-GuestLog (Set-ALFGuestDisplayResolution $Role)
-        $work = [Windows.SystemParameters]::WorkArea
-        $window.Width = [Math]::Min(1300, $work.Width)
-        $window.Height = [Math]::Min(850, $work.Height)
-    }
-    catch {
-        $message = "Optional display change skipped: $($_.Exception.Message)"
-        Write-GuestLog $message
-        [Windows.MessageBox]::Show($window, $message, 'Display setting', 'OK', 'Warning') | Out-Null
-    }
-})
+$ui.btnDisplay.Add_Click({ Set-GuestConsoleDisplay $true })
 $timer = New-Object Windows.Threading.DispatcherTimer
 $timer.Interval = [TimeSpan]::FromSeconds(10)
 $timer.Add_Tick({ Refresh-GuestStatus })
@@ -293,11 +408,14 @@ $window.Add_Closing({
     if (@($script:Processes.Values | Where-Object { -not $_.HasExited }).Count) {
         if ([Windows.MessageBox]::Show($window, 'A step is still running. Closing this console does not stop it. Close anyway?', 'Step still running', 'YesNo', 'Warning') -ne 'Yes') { $e.Cancel=$true }
     }
+    elseif ($Role -eq 'Node' -and $ui.txtTargetVersion.Text.Trim() -cne $script:NodeTargetVersion) {
+        if ([Windows.MessageBox]::Show($window, 'The target version change has not been applied. Close without saving it?', 'Target version', 'YesNo', 'Warning') -ne 'Yes') { $e.Cancel=$true }
+    }
 })
+Write-GuestLog 'Status is detected from this guest. Reopen the console after any restart.'
 $work = [Windows.SystemParameters]::WorkArea
 $window.Width = [Math]::Min($window.Width, $work.Width)
 $window.Height = [Math]::Min($window.Height, $work.Height)
-Write-GuestLog 'Status is detected from this guest. Reopen the console after any restart.'
 Refresh-GuestStatus
 $timer.Start()
 try { $window.ShowDialog() | Out-Null } finally { $timer.Stop() }

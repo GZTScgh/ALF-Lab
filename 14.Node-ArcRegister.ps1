@@ -1,5 +1,5 @@
 ﻿######################  14.Node-ArcRegister.ps1  ######################
-# Version: ALF Lab Builder 2.0.16   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.0.21   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # REGISTER NODE WITH AZURE ARC
 #
 # RUN ON: INSIDE each node (SConfig option 15 -> PowerShell), one node at a time
@@ -12,6 +12,10 @@
 #     - drive the Azure Local deployment from the portal wizard
 #   Nothing is deployed yet - this step just "introduces" the node to Azure.
 ##########################################################################
+
+param(
+    [ValidatePattern('^(?:[0-9]+(?:\.[0-9]+){3})?$')][string]$TargetSolutionVersionOverride = ''
+)
 
 #Define the tenant you will use to register your machine as Arc device
 #LEARN: Entra ID -> Overview -> Tenant ID. This is the identity directory, not the subscription.
@@ -36,6 +40,7 @@ $Region = "{{ArcRegion}}"   #set in the Lab Builder
 #       everyone deploys the same build. Format example: "12.2602.1002.10"
 $TargetSolutionVersion = ""
 #$TargetSolutionVersion = "12.2602.1002.10"   #<-- example of pinning a version
+if ($TargetSolutionVersionOverride) { $TargetSolutionVersion = $TargetSolutionVersionOverride }
 
 #Show the cmdlet's internal detail as it runs ($true = more learning output)
 $ShowVerboseOutput = $true

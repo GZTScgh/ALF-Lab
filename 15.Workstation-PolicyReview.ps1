@@ -1,5 +1,5 @@
 ﻿##############################################################
-# Version: ALF Lab Builder 2.0.16   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.0.21   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # 15.Workstation-PolicyReview.ps1
 # Shows exactly which Azure Policies act on the registered Azure Local nodes (Arc machines),
 # and - with approval - creates exemptions for the cluster resource group

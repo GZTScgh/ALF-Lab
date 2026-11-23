@@ -1,5 +1,5 @@
 ﻿##############################################################
-# Version: ALF Lab Builder 2.0.16   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.0.21   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # 05.Host-CopyScriptsToVM.ps1
 # Copies lab scripts from the host into a VM (no clipboard or network needed)
 #
@@ -55,7 +55,7 @@ function Copy-ALFGuestConsoleShortcut {
         $shortcut.IconLocation = 'C:\Windows\System32\shell32.dll,18'
         $shortcut.Save()
         Set-Content -LiteralPath $temp -Stream Zone.Identifier -Value '[ZoneTransfer]', 'ZoneId=3' -ErrorAction Stop
-        $destination = "C:\Users\Administrator\Desktop\ALF $consoleName Console.lnk"
+        $destination = "C:\Users\Public\Desktop\ALF $consoleName Console.lnk"
         Copy-VMFile -Name $VMName -SourcePath $temp -DestinationPath $destination -CreateFullPath -FileSource Host -Force -ErrorAction Stop
         Write-Host "  $consoleName desktop shortcut: $destination -> $($shortcut.TargetPath)" -ForegroundColor Green
     }
@@ -99,6 +99,6 @@ foreach ($VMName in $CopyPlan.Keys) {
 }
 
 Write-Host "Done. Inside the VM the scripts are in $GuestFolder" -ForegroundColor Green
-Write-Host "On the DC: use the ALF DC Console shortcut on local Administrator's desktop, or Launch-ALFDCConsole.cmd. On the admin station: use the ALF Admin Console shortcut on local Administrator's desktop, or Launch-ALFAdminConsole.cmd." -ForegroundColor Green
+Write-Host "On the DC or admin station: use the matching ALF Console shortcut on the Public Desktop, available to local and domain users, or the launcher in $GuestFolder. Existing elevation prompts still apply." -ForegroundColor Green
 Write-Host "Guest consoles detect progress automatically. Reopen the same console after any restart." -ForegroundColor Green
 ################

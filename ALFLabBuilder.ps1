@@ -1,5 +1,5 @@
 ﻿##############################################################
-# Version: ALF Lab Builder 2.0.16   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.0.21   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # ALFLabBuilder.ps1   -   1. ALF Lab Builder - Planning Console
 # A simple window for keeping track of every value the Azure Local lab needs,
 # and "rolling out" the lab scripts with those values filled in.
@@ -23,7 +23,7 @@ param(
     [string]$ValuesFile = (Join-Path $PSScriptRoot "LabValues.json")
 )
 
-$ALFVersion = "2.0.16"   #increment on EVERY change (also LabValues.json, VERSION.txt, CHANGELOG.md)
+$ALFVersion = "2.0.21"   #increment on EVERY change (also LabValues.json, VERSION.txt, CHANGELOG.md)
 . (Join-Path $PSScriptRoot 'ALFHostSizing.ps1')
 . (Join-Path $PSScriptRoot 'ALFGuestSizing.ps1')
 $script:HostSkus = @()
@@ -800,7 +800,12 @@ function Invoke-Rollout {
             else { $unknown[$k] = $true; $m.Value }
         })
         $count = @([regex]::Matches($text, $pattern) | Where-Object { $map.ContainsKey($_.Groups[1].Value) }).Count
-        Set-Content -Path (Join-Path $out $f.Name) -Value $new -Encoding UTF8 -NoNewline
+        if ($f.Extension -eq ".cmd" -and $new -match '[^\x00-\x7F]') {
+            Write-Log "Rollout failed: $($f.Name) contains non-ASCII text. CMD launchers must use ASCII."
+            return
+        }
+        $encoding = if ($f.Extension -eq ".cmd") { "ASCII" } else { "UTF8" }
+        Set-Content -Path (Join-Path $out $f.Name) -Value $new -Encoding $encoding -NoNewline
         if ($count) { Write-Log ("  {0,-38} {1} value(s) filled in" -f $f.Name, $count) }
         else        { Write-Log ("  {0,-38} copied (no placeholders)" -f $f.Name) }
     }

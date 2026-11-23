@@ -65,6 +65,118 @@ Assert ($source -notmatch 'ConfirmedAt|Check and confirm|Confirm-GuestStep') 'No
 Assert ($source -match 'ProcessStarted' -and $source -match 'StartTime.ToUniversalTime') 'Restore running steps only with both PID and start-time identity.'
 Assert ($source.Contains('if ($Role -eq ''Node'') { $ui.btnDisplay.Visibility')) 'Display option is hidden on nodes.'
 
+$detailsText = ($tokens | Where-Object { $_.Kind -eq 'HereStringLiteral' -and $_.Value.StartsWith('<Grid ') } | Select-Object -First 1).Value
+$details = [Windows.Markup.XamlReader]::Parse($detailsText)
+$ui = @{ txtArcValues=$details.FindName('txtArcValues'); txtTimeStatus=$details.FindName('txtTimeStatus') }
+Assert ($ui.txtArcValues.IsReadOnly -and $ui.txtTimeStatus.IsReadOnly) 'Arc values and time status are selectable but cannot edit the plan or time settings.'
+$refresh = $ast.FindAll({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Refresh-GuestNodeDetails' }, $true)[0]
+. ([scriptblock]::Create($refresh.Extent.Text))
+$script:DetailLogs = [Collections.Generic.List[string]]::new()
+$script:ArcValuesError = ''; $script:TimeStatusError = ''
+function Write-GuestLog([string]$Text) { $script:DetailLogs.Add($Text) }
+function Get-ALFGuestArcSettingsText { param($Folder) return 'Prepared Arc values' }
+function Get-ALFGuestTimeStatus {
+    if ($script:TimeFails) { throw 'Windows Time is stopped' }
+    return 'Source: DCFixture'
+}
+$script:TimeFails = $true
+Refresh-GuestNodeDetails
+Refresh-GuestNodeDetails
+Assert ($ui.txtArcValues.Text -eq 'Prepared Arc values' -and $ui.txtTimeStatus.Text -match 'Windows Time is stopped') 'Time-query failure remains visible without hiding Arc settings.'
+Assert ($script:DetailLogs.Count -eq 1 -and $ui.txtTimeStatus.Foreground.Color -eq $Colors.Attention.Color) 'Repeated refresh logs a persistent detail failure only once and highlights it.'
+$script:TimeFails = $false
+Refresh-GuestNodeDetails
+Assert ($ui.txtTimeStatus.Text -eq 'Source: DCFixture' -and $script:TimeStatusError -eq '') 'A recovered query replaces its stale error on refresh.'
+$ui.txtArcValues.Text = "Machine:         NodeFixture`r`nTenant ID:       11111111-1111-1111-1111-111111111111`r`nSubscription ID: 22222222-2222-2222-2222-222222222222`r`nResource group:  LabFixtureRG`r`nRegion:          southcentralus`r`nTarget version:  (Choose when the script runs)"
+$ui.txtTimeStatus.Text = "Leap Indicator: 0(no warning)`r`nStratum: 3`r`nPrecision: -23`r`nRoot Delay: 0.001s`r`nRoot Dispersion: 0.002s`r`nReferenceId: 0x0A2C000A`r`nLast Successful Sync Time: 11/21/2026 9:00:00 PM`r`nSource: DCFixture`r`nPoll Interval: 10 (1024s)"
+foreach ($width in 960, 1236) {
+    $details.Measure([Windows.Size]::new($width, [double]::PositiveInfinity))
+    $details.Arrange([Windows.Rect]::new(0, 0, $width, $details.DesiredSize.Height))
+    $details.UpdateLayout()
+    Assert ($details.DesiredSize.Height -le 210) 'Side-by-side registration and time details fit the space below compact Node cards.'
+    foreach ($box in $ui.Values) {
+        $bounds = $box.TransformToAncestor($details).TransformBounds([Windows.Rect]::new($box.RenderSize))
+        Assert ($bounds.Left -ge 0 -and $bounds.Right -le $width -and $bounds.Width -gt 0) 'Copyable values and time output remain inside the available width.'
+    }
+}
+Assert ($source.Contains('Refresh-GuestNodeDetails') -and $source.Contains('Update-GuestTargetVersionEditor') -and $source.Contains('$ui.panelTasks.Children.Add($details)')) 'Refresh the Node values/editor with status and keep them below the runnable Node steps.'
+
+$ui.txtTargetVersion = $details.FindName('txtTargetVersion')
+$ui.btnApplyTargetVersion = $details.FindName('btnApplyTargetVersion')
+$script:Processes = @{}
+$script:Cards = @{ Arc=@{run=$row.FindName('run')} }
+$script:Current = @{ Arc=(New-ALFGuestCheck 'Done' 'Connected') }
+$script:NodeTargetVersion = ''
+foreach ($name in 'Save-GuestState','Update-GuestTargetVersionEditor','Apply-GuestTargetVersion') {
+    $definition = $ast.FindAll({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name }, $true)[0]
+    . ([scriptblock]::Create($definition.Extent.Text))
+}
+function Refresh-GuestStatus {}
+$Role = 'Node'; $ALFVersion = '2.0.21'
+$StateFile = Join-Path ([IO.Path]::GetTempPath()) ('ALF-TargetState-' + [guid]::NewGuid().ToString('N') + '.json')
+$script:Records = @{ Arc=@{Started='start';ResultPath='receipt'} }
+try {
+    $Role = 'DC'
+    $script:Records = @{ Network=@{ResultPath='network-receipt'}; Forest=@{Started='start'} }
+    Save-GuestState
+    $script:Records.Forest.ResultPath = 'forest-receipt'
+    Save-GuestState
+    $saved = Get-Content -LiteralPath $StateFile -Raw | ConvertFrom-Json
+    Assert ($saved.Steps.Network.ResultPath -eq 'network-receipt' -and $saved.Steps.Forest.ResultPath -eq 'forest-receipt') 'Saving DC step 2 must replace an existing state file without an empty-backup-path error or losing step 1 progress.'
+    $Role = 'Node'
+    $script:Records = @{ Arc=@{Started='start';ResultPath='receipt'} }
+    $ui.txtTargetVersion.Text = ' 12.2602.1002.10 '
+    Update-GuestTargetVersionEditor
+    Assert ($ui.btnApplyTargetVersion.IsEnabled -and -not $script:Cards.Arc.run.IsEnabled) 'Unapplied target edits cannot silently run Arc with an older value.'
+    Apply-GuestTargetVersion
+    $saved = Get-Content -LiteralPath $StateFile -Raw | ConvertFrom-Json
+    Assert ($saved.TargetSolutionVersionOverride -eq '12.2602.1002.10' -and $saved.Steps.Arc.ResultPath -eq 'receipt') 'Save a trimmed node-only override alongside, not instead of, execution progress.'
+    $script:NodeTargetVersion = ConvertTo-ALFGuestTargetVersion $saved.TargetSolutionVersionOverride
+    $ui.txtTargetVersion.Text = ''
+    Apply-GuestTargetVersion
+    Assert ((Get-Content -LiteralPath $StateFile -Raw | ConvertFrom-Json).TargetSolutionVersionOverride -eq '') 'Applying blank removes the pin and preserves the delivered script default.'
+    $script:Processes = @{ Arc=[pscustomobject]@{HasExited=$false} }
+    $ui.txtTargetVersion.Text = '12.2602.1002.11'
+    Update-GuestTargetVersionEditor
+    $before = (Get-FileHash -LiteralPath $StateFile).Hash
+    Apply-GuestTargetVersion
+    Assert (-not $ui.txtTargetVersion.IsEnabled -and -not $ui.btnApplyTargetVersion.IsEnabled -and (Get-FileHash -LiteralPath $StateFile).Hash -eq $before) 'A running step cannot change the persisted or active target.'
+    $script:Processes = @{}
+    function Set-Content {
+        param($LiteralPath,$Value,$Encoding,$ErrorAction)
+        Microsoft.PowerShell.Management\Set-Content -LiteralPath $LiteralPath -Value 'partial' -Encoding UTF8
+        throw 'Mock state write failed'
+    }
+    Assert-Throws { Save-GuestState } 'State-write failure must remain explicit.'
+    Assert ((Get-FileHash -LiteralPath $StateFile).Hash -eq $before) 'A failed temporary write cannot truncate saved progress or the applied override.'
+    Microsoft.PowerShell.Management\Remove-Item -LiteralPath 'function:Set-Content'
+    $Role = 'Admin'
+    Save-GuestState
+    Assert (-not (Get-Content -LiteralPath $StateFile -Raw | ConvertFrom-Json).PSObject.Properties['TargetSolutionVersionOverride']) 'DC/Admin state never receives a node target-version setting.'
+}
+finally { Microsoft.PowerShell.Management\Remove-Item -LiteralPath $StateFile -Force }
+
+$runner = [Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'ALFGuestStepRunner.ps1'), [ref]$tokens, [ref]$errors)
+$runBlock = $runner.FindAll({ param($n) $n -is [Management.Automation.Language.TryStatementAst] }, $true)[0]
+$ResultPath = Join-Path ([IO.Path]::GetTempPath()) ('ALF-TargetReceipt-' + [guid]::NewGuid().ToString('N') + '.json')
+function 14.Node-ArcRegister.ps1 { param($TargetSolutionVersionOverride='ScriptDefault') $script:ReceivedTarget=$TargetSolutionVersionOverride }
+function 12.Node-Configure.ps1 { $script:ConfigureCalls++ }
+try {
+    $ScriptPath = '14.Node-ArcRegister.ps1'; $TargetSolutionVersionOverride = '12.2602.1002.10'; $exitCode=0
+    . ([scriptblock]::Create($runBlock.Extent.Text))
+    Assert ($script:ReceivedTarget -eq $TargetSolutionVersionOverride -and $exitCode -eq 0) 'Runner forwards exactly the applied target to Arc, not a rewritten delivered file.'
+    $TargetSolutionVersionOverride = ''
+    . ([scriptblock]::Create($runBlock.Extent.Text))
+    Assert ($script:ReceivedTarget -eq 'ScriptDefault') 'Blank sends no override argument and leaves the script default intact.'
+    $ScriptPath = '12.Node-Configure.ps1'; $TargetSolutionVersionOverride = '12.2602.1002.10'; $script:ConfigureCalls=0
+    . ([scriptblock]::Create($runBlock.Extent.Text))
+    Assert ($script:ConfigureCalls -eq 0 -and $exitCode -eq 1) 'Override arguments cannot reach destructive node configuration or another guest step.'
+}
+finally {
+    Microsoft.PowerShell.Management\Remove-Item -LiteralPath $ResultPath -Force
+    foreach ($name in '14.Node-ArcRegister.ps1','12.Node-Configure.ps1') { Microsoft.PowerShell.Management\Remove-Item -LiteralPath "function:$name" }
+}
+
 $deliveryAst = [Management.Automation.Language.Parser]::ParseFile((Join-Path $root '05.Host-CopyScriptsToVM.ps1'), [ref]$tokens, [ref]$errors)
 $fn = $deliveryAst.FindAll({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Copy-ALFGuestConsoleShortcut' }, $true)[0]
 . ([scriptblock]::Create($fn.Extent.Text))
@@ -91,7 +203,7 @@ try {
         $script:FailCopy = $false; $script:CleanedPath = ''; $script:ShortcutMock.Saved = $false
         Copy-ALFGuestConsoleShortcut $case.VM 'C:\ISO' $case.Launcher
         Assert ($script:ShortcutMock.Saved -and $script:ShortcutMock.TargetPath -eq "C:\ISO\$($case.Launcher)" -and $script:ShortcutMock.WorkingDirectory -eq 'C:\ISO') 'Each shortcut opens its own guest launcher from the guest scripts folder.'
-        Assert ($script:CopyArgs.Name -eq $case.VM -and $script:CopyArgs.Destination -eq "C:\Users\Administrator\Desktop\$($case.Shortcut)" -and $script:CopyArgs.Source -eq $script:TempPath) 'Deliver the shortcut only to that VM local Administrator desktop, not the host or public desktop.'
+        Assert ($script:CopyArgs.Name -eq $case.VM -and $script:CopyArgs.Destination -eq "C:\Users\Public\Desktop\$($case.Shortcut)" -and $script:CopyArgs.Source -eq $script:TempPath) 'Deliver each launcher to its VM Public Desktop so local and domain profiles share it, not to the host.'
         Assert ($script:CopyArgs.Force -and $script:CopyArgs.CreateFullPath -and $script:CopyArgs.FileSource -eq 'Host') 'Repeat delivery refreshes the fixed guest shortcut and can create the desktop path.'
         Assert ($script:CleanedPath -eq $script:TempPath) 'Remove the temporary host shortcut after delivery.'
         $script:FailCopy = $true; $script:CleanedPath = ''

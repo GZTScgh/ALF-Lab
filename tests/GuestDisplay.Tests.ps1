@@ -37,4 +37,20 @@ Assert ($script:Width -eq 1024 -and $script:Height -eq 768) 'Unsupported mode ne
 $script:Result=0; $script:Apply=$false
 Assert-Throws { Set-ALFGuestDisplayResolution Admin } 'did not apply'
 Assert-Throws { Set-ALFGuestDisplayResolution Node } 'only available'
+$tokens=$null; $errors=$null
+$console=[Management.Automation.Language.Parser]::ParseFile((Join-Path $root 'ALFGuestConsole.ps1'),[ref]$tokens,[ref]$errors)
+$display=$console.FindAll({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Set-GuestConsoleDisplay'},$true)[0]
+. ([scriptblock]::Create($display.Extent.Text))
+Add-Type -AssemblyName PresentationFramework
+function Write-GuestLog([string]$Text) { $script:DisplayLog=$Text }
+$window=[pscustomobject]@{Width=1024;Height=768};$Role='Admin'
+$script:Width=1024;$script:Height=768;$script:Apply=$true;$script:Remote=$false
+Set-GuestConsoleDisplay
+Assert ($script:Width -eq 1600 -and $script:Height -eq 900) 'A manual display request reuses the tested display helper.'
+$script:Width=1024;$script:Height=768;$script:Remote=$true;$before=$script:ChangeCalls
+Set-GuestConsoleDisplay
+Assert ($script:DisplayLog -match 'connection client' -and $script:ChangeCalls -eq $before) 'A client-controlled display request is logged without a native change.'
+$displayCalls=@($console.FindAll({param($n) $n -is [Management.Automation.Language.CommandAst] -and $n.GetCommandName() -eq 'Set-GuestConsoleDisplay'},$true))
+$displayClick=$console.FindAll({param($n) $n -is [Management.Automation.Language.InvokeMemberExpressionAst] -and $n.Member.Value -eq 'Add_Click' -and $n.Expression.Extent.Text -eq '$ui.btnDisplay'},$true)[0]
+Assert ($displayCalls.Count -eq 1 -and $displayClick -and $displayCalls[0].Extent.StartOffset -gt $displayClick.Extent.StartOffset -and $displayCalls[0].Extent.EndOffset -lt $displayClick.Extent.EndOffset) 'Only clicking the manual display button requests a resolution change; opening the console does not.'
 Write-Output "PASS: $script:Passed optional display cases; no real display APIs invoked."

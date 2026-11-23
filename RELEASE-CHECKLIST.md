@@ -1,4 +1,4 @@
-﻿# ALF Lab Builder v2.0.16 - release checklist
+﻿# ALF Lab Builder v2.0.21 - release checklist
 
 - [ ] Host VM size (SKU) is first in section 2 after load/migration/save; all other field order and values remain unchanged.
 
@@ -18,12 +18,18 @@
 
 
 - [ ] Guest consoles have only runnable cards (DC 4, Admin 1, Node 2), concise descriptions, detected status and Run/Open script; keep the Host Console green/blue theme. No manual readiness/confirmation cards remain.
-- [ ] Same-role v2.0.7 through v2.0.15 state retains process/receipt metadata, not old confirmation proof. Reject unsupported role/schema; verify PID plus UTC start time and visible launch/probe/receipt failures. Check compact layout at 1024- and 1300-pixel window widths.
+- [ ] Same-role v2.0.7 through v2.0.20 state retains process/receipt metadata, not old confirmation proof. Reject unsupported role/schema; verify PID plus UTC start time and visible launch/probe/receipt failures. Check compact layout at 1024- and 1300-pixel window widths.
+- [ ] Windows PowerShell: create DC state, then save Forest progress into that existing file. Typed-null File.Replace must succeed and preserve Network progress; failed temporary writes must preserve the original. Accept v2.0.19 state and node overrides without a reset. Run console/status regressions normally in an approved session.
 - [ ] Actual settings, not exit code alone, determine Done: DC identity/domain/DNS/optional DHCP; Admin identity/domain/tools; generated node identity/network/admin/storage; successful Arc bootstrap plus connected agent at the planned target. DC networking stays done after self-DNS configuration.
+- [ ] Node-only read-only Arc values and NTP/domain time-status panels sit below the Arc card at 1024/1300 widths. Copyable tenant/subscription/RG/region/target version match the delivered script; machine is the actual node. Edited/pinned inputs refresh; a blank target prompts selection only during script execution. Time source/last sync/stratum come from `w32tm /query /status`, never a resync. Missing/unfilled/dynamic settings and failed/empty time queries are explicit; one failed panel does not hide the other.
+- [ ] Node **Next run / Apply** accepts four numeric version parts, saves only in that node's state and survives restart. Blank restores the delivered script default. Dirty edits block Arc Run; running steps disable editing. Verify exact named-parameter forwarding only to script 14, no automatic update or installed-version claim, malformed state failure and atomic save preservation. Run focused status/console tests normally.
 - [ ] DC AD tools card checks module installation only; optional OU/account exercise and cross-VM/Azure/deployment prerequisites are not claimed verified.
 - [ ] Node setup retains a destructive confirmation. Existing cluster membership disables rerun; deployed lab storage need not remain RAW. An unknown/failed cluster lookup must not allow disk cleanup.
-- [ ] **[untested on guests]** DC/Admin 1600 x 900 button applies a supported desktop mode; unsupported/client-controlled sessions warn without failing setup. Button is absent on nodes; do not change the validation workstation's display.
-- [ ] Host step 05 creates ALF DC Console.lnk on the DC local Administrator's desktop and ALF Admin Console.lnk on the planned admin VM local Administrator's desktop, targeting their matching C:\ISO launchers. Retry updates both shortcuts without reconfiguring guests; failures warn and temporary host shortcuts are removed. Verify the existing DC shortcut remains unchanged.
+- [ ] Four prepared RAW disks and no non-primordial storage pool report ready for cluster pooling. A primordial pool alone is normal; actual pools, wrong/non-RAW/offline/read-only disks and genuine provider failures remain visible.
+- [ ] All five source and four rollout CMD launchers start with byte 0x40 (`@echo off`), contain no BOM, and stay ASCII after fresh rollout. PowerShell/text Unicode is preserved; a non-ASCII CMD template fails visibly without a lossy write.
+- [ ] Run tests\LauncherEncoding.Tests.ps1 and tests\GuestStatus.Tests.ps1 normally in an approved PowerShell session. Preserve v2.0.16 process/receipt state; do not run actual guest disk cleanup during validation.
+- [ ] **[untested on guests]** Opening DC/Admin consoles leaves the current local/domain user's resolution unchanged. Only clicking 1600 x 900 display requests a change. Already-correct modes are unchanged; unsupported/client-controlled sessions log/show a warning only after a manual request. Nodes remain unchanged; no logon tasks or validation-workstation display changes.
+- [ ] Host step 05 creates ALF DC Console.lnk and ALF Admin Console.lnk on each intended VM's C:\Users\Public\Desktop, targeting matching C:\ISO launchers. Sign in with local and domain accounts to verify availability and existing elevation prompts. Retry updates public links without reconfiguring guests or deleting personal shortcuts; failures warn and temporary host shortcuts are removed.
 - [ ] Run tests\GuestConsole.Tests.ps1, tests\GuestStatus.Tests.ps1 and tests\GuestDisplay.Tests.ps1 normally in an approved STA PowerShell session; all guest queries/display changes are mocked.
 
 
@@ -45,7 +51,7 @@
 - [ ] Host Console step 9: apply Node3/Node4 names, restart the console, and verify the same pair appears in creation, preparation and per-node configure scripts. Original plan/IP order remain unchanged.
 - [ ] Reject duplicate/invalid/reserved names; block both node steps with unapplied edits and prevent changing names during a running host step.
 - [ ] A previous pair's run history must not complete the newly selected pair; existing VMs must not be renamed or deleted.
-- [ ] Copy `ALFNodeSettings.ps1` with all v2.0.16 host files; retain the host-local `ALFHostConsole-Nodes.json` during refresh.
+- [ ] Copy `ALFNodeSettings.ps1` with all v2.0.21 host files; retain the host-local `ALFHostConsole-Nodes.json` during refresh.
 
 Complete these before publishing. Items marked **[untested]** were changed for the release
 and haven't been run end to end yet.
@@ -66,7 +72,7 @@ and haven't been run end to end yet.
 - [ ] Invalid/partial/non-ASCII identifiers and unapplied changes block save, command copy/file generation, Azure preparation and rollout; close-and-save stays open
 - [ ] Regenerated rollout uses the applied identifier everywhere; no stale 2105/1024 lab names remain (1024 GB disks are unchanged)
 - [ ] Older plans load without retargeting names; applying a new identifier preserves prefixes/suffixes and nested OU parents
-- [ ] **[untested]** Fresh PC: unblock the files, launch `Launch-ALFLabBuilder.cmd`; the version badge at the top shows *Version 2.0.16*
+- [ ] **[untested]** Fresh PC: unblock the files, launch `Launch-ALFLabBuilder.cmd`; the version badge at the top shows *Version 2.0.17*
 - [ ] **[untested]** Window titles and headings read `1. ALF Lab Builder - Planning Console` and `2. ALF Lab Builder - Host Console`
 - [ ] Tenant ID and Subscription ID show **Missing** until filled in
 - [ ] **Check values** - everything OK once the IDs are entered
@@ -97,7 +103,7 @@ and haven't been run end to end yet.
       `Select-String -Path .\* -Pattern '<your tenant id>','<your subscription id>','<your user name>'`
 - [ ] No `Rollout` folder, `LabValues.shareable.json`, logs or CSV reports in the package
 - [ ] `LabValues.json` Settings folders are empty and the second local admin password is empty
-- [ ] **[pending]** Update the source guide `ALF-Lab-Build-Guide-v1.0.24.docx` with the new identifier workflow, then publish `ALF-Lab-Build-Guide-v2.0.16.docx` with matching title page, page header and Appendix D. Saved plans retain their chosen four-digit identifier; missing identifiers default to 2015.
+- [ ] **[pending]** Update the source guide `ALF-Lab-Build-Guide-v1.0.24.docx` with the new identifier workflow, then publish `ALF-Lab-Build-Guide-v2.0.17.docx` with matching title page, page header and Appendix D. Saved plans retain their chosen four-digit identifier; missing identifiers default to 2015.
 
 ## Version
 - [ ] Version is the same everywhere: Lab Builder (`$ALFVersion`), `LabValues.json`, `VERSION.txt`, README, CHANGELOG, zip and folder name

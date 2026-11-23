@@ -12,6 +12,7 @@ LabValues.*.json
 Generated/
 NodeFiles/
 ALFGuestConsole-*.json
+ALFGuestConsole-*-State.json.*.tmp
 ALFNodeDelivery.json
 LCMAccount.txt
 *.log

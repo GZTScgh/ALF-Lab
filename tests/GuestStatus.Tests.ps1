@@ -33,7 +33,49 @@ try {
     Assert-Throws { Get-ALFGuestScriptConfig $root '12.Node-Configure.ps1' @('AZLnodename') } 'Unfilled node identity must fail explicitly.'
     Set-Content -LiteralPath (Join-Path $folder 'dynamic.ps1') -Value '$Name = (Get-Date)'
     Assert-Throws { Get-ALFGuestScriptConfig $folder 'dynamic.ps1' @('Name') } 'Never execute expressions when inspecting settings.'
-    foreach ($version in '2.0.7','2.0.14','2.0.15','2.0.16') {
+    Set-Content -LiteralPath (Join-Path $folder 'dynamic.ps1') -Value '$Name = "$(Get-Date)"'
+    Assert-Throws { Get-ALFGuestScriptConfig $folder 'dynamic.ps1' @('Name') } 'Do not present interpolated expressions as literal registration inputs.'
+    $arcPath = Join-Path $folder '14.Node-ArcRegister.ps1'
+    $arcSource = Get-Content -LiteralPath $arcPath -Raw
+    $values = Get-ALFGuestArcSettingsText $folder
+    foreach ($value in $replacements['{{TenantId}}'], $replacements['{{SubscriptionId}}'], 'LabRG', 'southcentralus', $env:COMPUTERNAME) {
+        Assert ($values.Contains($value)) 'Show the delivered Azure target and actual machine used by the Arc script.'
+    }
+    Assert ($values.Contains('(Choose when the script runs)')) 'Blank target solution version describes the existing interactive selection.'
+    Assert ((Get-ALFGuestArcSettingsText $folder ' 12.2602.1002.11 ').Contains('12.2602.1002.11 (node override)')) 'Show the applied node override as the next Arc target.'
+    foreach ($invalid in '12.2602', '12.2602.1002.x', '12.2602.1002.10"; Get-Date') {
+        Assert-Throws { ConvertTo-ALFGuestTargetVersion $invalid } 'Reject malformed or executable target text before saving or constructing launch arguments.'
+    }
+    Set-Content -LiteralPath $arcPath -Value ($arcSource.Replace('$TargetSolutionVersion = ""', '$TargetSolutionVersion = "12.2602.1002.10"').Replace('"LabRG"', '"UpdatedRG"'))
+    $values = Get-ALFGuestArcSettingsText $folder
+    Assert ($values.Contains('12.2602.1002.10') -and $values.Contains('UpdatedRG') -and -not $values.Contains('Resource group:  LabRG')) 'Reread pinned versions and edited delivered inputs instead of caching planning values.'
+    Assert ((Get-ALFGuestArcSettingsText $folder '').Contains('Target version:  12.2602.1002.10')) 'Clearing the node override returns to a pinned delivered default, not an unconditional empty version.'
+    Assert-Throws { Get-ALFGuestArcSettingsText $root } 'Unfilled registration inputs are reported, not shown as a usable target.'
+    Set-Content -LiteralPath $arcPath -Value $arcSource
+    $script:TimeOutput = @('Leap Indicator: 0(no warning)', 'Stratum: 3', 'Last Successful Sync Time: 11/21/2026 9:00:00 PM', 'Source: DCFixture')
+    $script:TimeExit = 0
+    function w32tm.exe {
+        param($Query, $Status)
+        $script:TimeArgs = @($Query, $Status)
+        $global:LASTEXITCODE = $script:TimeExit
+        return $script:TimeOutput
+    }
+    try {
+        $priorExit = $global:LASTEXITCODE
+        $global:LASTEXITCODE = 42
+        Assert ((Get-ALFGuestTimeStatus) -ceq ($script:TimeOutput -join "`r`n")) 'Show time source, last synchronization and stratum without rewriting or claiming NTP health.'
+        Assert (($script:TimeArgs -join ' ') -eq '/query /status' -and $global:LASTEXITCODE -eq 42) 'Use only a read-only time query and preserve native exit status.'
+        $script:TimeExit = 1; $script:TimeOutput = @('The service has not been started.')
+        Assert-Throws { Get-ALFGuestTimeStatus } 'A failed or stopped Windows Time query must remain explicit.'
+        Assert ($global:LASTEXITCODE -eq 42) 'Restore native exit status after a failed query.'
+        $script:TimeExit = 0; $script:TimeOutput = @()
+        Assert-Throws { Get-ALFGuestTimeStatus } 'Empty time status cannot look like a successful query.'
+    }
+    finally {
+        $global:LASTEXITCODE = $priorExit
+        Microsoft.PowerShell.Management\Remove-Item -LiteralPath 'function:w32tm.exe'
+    }
+    foreach ($version in '2.0.7','2.0.14','2.0.15','2.0.16','2.0.17','2.0.18','2.0.19','2.0.20','2.0.21') {
         $saved = [pscustomobject]@{
             Role='Node'; Version=$version
             Steps=[pscustomobject]@{
@@ -41,13 +83,13 @@ try {
                 Configure=[pscustomobject]@{ Confirmed=$true; ConfirmedAt='old'; Started='start'; ResultPath='receipt'; ProcessId=42; ProcessStarted='UTC' }
             }
         }
-        $records = ConvertTo-ALFGuestRecords $saved 'Node' '2.0.16' @('Configure','Arc')
+        $records = ConvertTo-ALFGuestRecords $saved 'Node' '2.0.21' @('Configure','Arc')
         Assert ($records.Configure.Started -eq 'start' -and $records.Configure.ProcessId -eq 42 -and $records.Configure.ProcessStarted -eq 'UTC' -and $records.Configure.ResultPath -eq 'receipt') 'Preserve compatible execution/process metadata.'
         Assert (-not $records.ContainsKey('Ready') -and -not $records.Configure.ContainsKey('Confirmed')) 'Discard manual cards and confirmation proof.'
     }
-    Assert-Throws { ConvertTo-ALFGuestRecords $saved 'DC' '2.0.16' @('Network') } 'Reject cross-role state.'
+    Assert-Throws { ConvertTo-ALFGuestRecords $saved 'DC' '2.0.21' @('Network') } 'Reject cross-role state.'
     $saved.Version='9.0.0'
-    Assert-Throws { ConvertTo-ALFGuestRecords $saved 'Node' '2.0.16' @('Configure') } 'Reject unsupported state releases.'
+    Assert-Throws { ConvertTo-ALFGuestRecords $saved 'Node' '2.0.21' @('Configure') } 'Reject unsupported state releases.'
     Assert ((Resolve-ALFGuestTaskState (New-ALFGuestCheck 'NotDone' 'Missing') @{Confirmed=$true} $false $null '').State -eq 'NotDone') 'Old confirmations never turn a step green.'
     Assert ((Resolve-ALFGuestTaskState (New-ALFGuestCheck 'NotDone' 'Missing') @{} $false @{ExitCode=0} '').State -eq 'Attention') 'Successful exit is not configuration completion.'
     Assert ((Resolve-ALFGuestTaskState (New-ALFGuestCheck 'Done' 'Detected') @{} $true $null '').State -eq 'Running') 'Running process remains visible.'
@@ -60,6 +102,7 @@ try {
     $script:DNS=@('10.44.0.10'); $script:ClusterPresent=$false; $script:ClusterName='ClusterFixture'
     $script:Raw=$true; $script:UserEnabled=$true; $script:DhcpThrows=$false; $script:ToolsInstalled=$true
     $script:ClusterLookupFails=$false; $script:SecureChannel=$true; $script:ModuleInstalled=$true; $script:HasGateway=$true
+    $script:ExistingPool=$false; $script:PoolQueryFails=$false
     $script:Bootstrap='Succeeded'; $script:AgentThrows=$false
     $script:Agent=[pscustomobject]@{status='Connected';resourceName='LastMinuteNode3';tenantId=$replacements['{{TenantId}}'];subscriptionId=$replacements['{{SubscriptionId}}'];resourceGroup='LabRG';location='southcentralus'}
     $ALFExpectedClusterName='ClusterFixture'
@@ -85,7 +128,15 @@ try {
         if ($script:ClusterPresent) { throw 'Cluster-owned physical disks need not appear in Get-Disk.' }
         1..4 | ForEach-Object { [pscustomobject]@{IsBoot=$false;IsSystem=$false;BusType='SCSI';PartitionStyle=$(if($script:Raw){'RAW'}else{'GPT'});IsOffline=$false;IsReadOnly=$false} }
     }
-    function Get-StoragePool { param($IsPrimordial,$ErrorAction) }
+    function Get-StoragePool {
+        param($IsPrimordial,$ErrorAction)
+        if ($script:PoolQueryFails) { throw 'Storage provider query failed' }
+        if ($PSBoundParameters.ContainsKey('IsPrimordial') -and -not $IsPrimordial -and -not $script:ExistingPool) {
+            throw "No MSFT_StoragePool objects found with property 'IsPrimordial' equal to 'False'."
+        }
+        [pscustomobject]@{Name='Primordial';IsPrimordial=$true}
+        if ($script:ExistingPool) { [pscustomobject]@{Name='ExistingPool';IsPrimordial=$false} }
+    }
     function Test-Path {
         param($Path,$LiteralPath,$PathType,$ErrorAction)
         $actual=if($LiteralPath){$LiteralPath}else{$Path}
@@ -129,6 +180,15 @@ try {
     }
     $nodeTask=@{Id='Configure';Script='12.Node-Configure.ps1'}
     Assert ((Get-ALFGuestTaskCheck $nodeTask Node $folder).State -eq 'Done') 'Prepared RAW node disks and actual node settings are detected.'
+    Assert ((Get-ALFGuestTaskCheck $nodeTask Node $folder).Detail -match 'RAW data disks ready') 'No non-primordial pool is the expected ready-to-pool state.'
+    $script:ExistingPool=$true
+    Assert ((Get-ALFGuestTaskCheck $nodeTask Node $folder).State -eq 'NotDone') 'An actual non-primordial pool still prevents claiming unpooled RAW readiness.'
+    $script:ExistingPool=$false; $script:PoolQueryFails=$true
+    $check=Get-ALFGuestTaskCheck $nodeTask Node $folder
+    Assert ($check.State -eq 'Attention' -and -not $check.RunAllowed -and $check.Detail -match 'Storage provider query failed') 'Genuine storage lookup failures remain explicit and cannot allow disk cleanup.'
+    $script:PoolQueryFails=$false; $script:Raw=$false
+    Assert ((Get-ALFGuestTaskCheck $nodeTask Node $folder).State -eq 'NotDone') 'No pool alone is not proof of RAW disk readiness.'
+    $script:Raw=$true
     $script:HasGateway=$false
     $check=Get-ALFGuestTaskCheck $nodeTask Node $folder
     Assert ($check.State -eq 'NotDone' -and $check.RunAllowed) 'A missing default route is ordinary incomplete setup, not a blocked status failure.'

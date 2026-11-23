@@ -1,4 +1,4 @@
-# Version: ALF Lab Builder 2.0.16
+# Version: ALF Lab Builder 2.0.21
 # Read-only guest checks. Configuration scripts are inspected, never executed.
 
 $ALFExpectedClusterName = '{{ClusterName}}'
@@ -31,6 +31,9 @@ function Get-ALFGuestScriptConfig([string]$Folder, [string]$File, [string[]]$Nam
             if ($config[$name] -lt 1 -or $config[$name] -gt 32) { throw "Invalid subnet prefix in $File." }
         }
         elseif ($text -match '^"([^"\r\n]*)"$' -or $text -match "^'([^'\r\n]*)'$") {
+            if ($assignment.Right.FindAll({ param($n)
+                $n -is [Management.Automation.Language.ExpandableStringExpressionAst] -and $n.NestedExpressions.Count
+            }, $true).Count) { throw "Setting '$name' must be literal data in $File." }
             $config[$name] = $Matches[1]
         }
         elseif ($text -in '$true', '$false') { $config[$name] = $text -eq '$true' }
@@ -52,6 +55,40 @@ function Get-ALFGuestScriptConfig([string]$Folder, [string]$File, [string[]]$Nam
         }
     }
     return $config
+}
+
+function ConvertTo-ALFGuestTargetVersion([string]$Value = '') {
+    $version = $Value.Trim()
+    if ($version -and $version -notmatch '^[0-9]+(?:\.[0-9]+){3}$') {
+        throw 'Enter four numeric parts, for example 12.2602.1002.10, or leave blank to use the delivered script default.'
+    }
+    return $version
+}
+
+function Get-ALFGuestArcSettingsText([string]$Folder, [string]$TargetSolutionVersionOverride = '') {
+    $config = Get-ALFGuestScriptConfig $Folder '14.Node-ArcRegister.ps1' @('Tenant', 'Subscription', 'RG', 'Region', 'TargetSolutionVersion')
+    $override = ConvertTo-ALFGuestTargetVersion $TargetSolutionVersionOverride
+    $version = if ($override) { "$override (node override)" } elseif ($config.TargetSolutionVersion) { $config.TargetSolutionVersion } else { '(Choose when the script runs)' }
+    return @(
+        "Machine:         $env:COMPUTERNAME"
+        "Tenant ID:       $($config.Tenant)"
+        "Subscription ID: $($config.Subscription)"
+        "Resource group:  $($config.RG)"
+        "Region:          $($config.Region)"
+        "Target version:  $version"
+    ) -join "`r`n"
+}
+
+function Get-ALFGuestTimeStatus {
+    $previousExit = $global:LASTEXITCODE
+    try {
+        $output = @(& w32tm.exe /query /status 2>&1)
+        if ($LASTEXITCODE -ne 0) { throw "w32tm /query /status failed (exit $LASTEXITCODE): $($output -join ' ')" }
+        $text = ($output -join "`r`n").Trim()
+        if ([string]::IsNullOrWhiteSpace($text)) { throw 'w32tm /query /status returned no time status.' }
+        return $text
+    }
+    finally { $global:LASTEXITCODE = $previousExit }
 }
 
 function Test-ALFGuestSameSet($Actual, $Expected) {
@@ -221,12 +258,12 @@ function Get-ALFGuestTaskCheck($Task, [string]$Role, [string]$Folder) {
                     return New-ALFGuestCheck 'Done' 'Node configured; storage is managed by the lab cluster.' $false
                 }
                 $disks = @(Get-Disk -ErrorAction Stop | Where-Object { -not $_.IsBoot -and -not $_.IsSystem -and "$($_.BusType)" -ne 'USB' })
-                $pools = @(Get-StoragePool -IsPrimordial $false -ErrorAction Stop)
+                $pools = @(Get-StoragePool -ErrorAction Stop | Where-Object { -not $_.IsPrimordial })
                 if ($disks.Count -ne $c.ExpectedDataDisks -or $pools.Count -or
                     @($disks | Where-Object { "$($_.PartitionStyle)" -ne 'RAW' -or $_.IsOffline -or $_.IsReadOnly }).Count) {
                     return New-ALFGuestCheck 'NotDone' 'Data disks are not ready. Run performs destructive disk cleanup.'
                 }
-                return New-ALFGuestCheck 'Done' 'Node identity, networking, local admin and empty data disks detected.'
+                return New-ALFGuestCheck 'Done' 'Node configured; RAW data disks ready for cluster pooling.'
             }
             'Node/Arc' {
                 $c = Get-ALFGuestScriptConfig $Folder $Task.Script @('Tenant', 'Subscription', 'RG', 'Region')
@@ -275,7 +312,7 @@ function Resolve-ALFGuestTaskState($Check, $Record, [bool]$Running, $Receipt, [s
 }
 
 function ConvertTo-ALFGuestRecords($Saved, [string]$Role, [string]$Version, [string[]]$Ids) {
-    $compatible = @($Version, '2.0.7', '2.0.8', '2.0.9', '2.0.10', '2.0.11', '2.0.12', '2.0.13', '2.0.14', '2.0.15')
+    $compatible = @($Version, '2.0.7', '2.0.8', '2.0.9', '2.0.10', '2.0.11', '2.0.12', '2.0.13', '2.0.14', '2.0.15', '2.0.16', '2.0.17', '2.0.18', '2.0.19', '2.0.20')
     if ($Saved.Role -ne $Role -or $Saved.Version -notin $compatible -or
         ($Saved.SchemaVersion -and $Saved.SchemaVersion -notin 1, 2) -or -not $Saved.Steps) {
         throw 'State belongs to another role/release, or has an unsupported schema.'

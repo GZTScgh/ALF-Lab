@@ -3,6 +3,30 @@
 The version goes up with every change. It's shown at the top of the Lab Builder window,
 in `VERSION.txt` and in the zip file name (`ALF-LabBuilder-v<version>.zip`).
 
+## 2.0.21
+- Remove automatic DC/Admin resolution changes when opening the console. Keep the optional 1600 x 900 display button, supported-mode checks and manual-request warnings.
+- Add a manual-only invocation regression, retain same-role v2.0.20 progress and node overrides, and refresh the matching rollout without changing private planning values or Public Desktop shortcuts.
+
+## 2.0.20
+- Fix guest-console state saves when a state file already exists: pass a typed .NET null backup path instead of ordinary PowerShell `$null`. This removes the "Replace ... path is not of a legal form" launch/recording failure, including DC step 2.
+- Retain atomic replacement, prior progress, node-local target overrides, Public Desktop shortcuts and display behavior. Add an existing-DC-state regression, accept same-role v2.0.19 state and refresh matching rollout without changing private planning values.
+
+## 2.0.19
+- Add a compact just-in-time target-version override in each Node console. Apply saves locally beside progress for the next Arc run; blank restores the delivered script default. Validate numeric version syntax, block unapplied/busy edits, pass a named argument only to Arc, and retain same-role v2.0.18 state with atomic writes.
+- Put DC/Admin launcher shortcuts on Public Desktop so local and domain accounts share them, while retaining elevation prompts and existing personal links.
+- Try 1600 x 900 when a DC/Admin console opens, reusing supported-mode/verification and client-controlled-session safeguards. Startup failures are logged without repeated dialogs; nodes, logon behavior and time settings remain unchanged.
+- Update focused persistence/forwarding/public-shortcut/display cases and refresh the matching rollout without changing private planning values or publishing.
+
+## 2.0.18
+- Show copyable Arc registration inputs below the Node Arc card, read from the delivered script: actual machine, tenant, subscription, resource group, region and target solution version.
+- Show current NTP/domain time source and synchronization status beside the Arc values using only `w32tm /query /status`. Refresh both panels with status; report inspection/query failures without changing registration, time configuration or step completion.
+- Retain compact DC/Admin/Node flow and same-role v2.0.17 execution metadata; add focused read-only input/query/layout cases and refresh the matching rollout without changing private settings.
+
+## 2.0.17
+- Fix garbage before `@echo off` by removing UTF-8 BOMs from all CMD launchers and writing future CMD rollout as ASCII; retain UTF-8 for PowerShell/text and reject non-ASCII CMD templates instead of corrupting them.
+- Treat absence of a non-primordial storage pool as the expected pre-deployment state. Prepared RAW disks now report ready for cluster pooling; actual existing pools, unready disks and genuine storage-query failures retain their safeguards.
+- Add focused encoding/storage regressions, retain same-role v2.0.16 execution metadata and refresh matching rollout without changing saved/private settings.
+
 ## 2.0.16
 - Simplify guest consoles to runnable setup cards (DC 4, Admin 1, Node 2), short descriptions and a handoff note, using the Host Console layout and green/blue status theme.
 - Replace student confirmation with read-only configuration detection; keep restart/error indicators, process identity and execution receipts. Old confirmations are ignored, and incomplete prerequisites warn rather than gate progress.
