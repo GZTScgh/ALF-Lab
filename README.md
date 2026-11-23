@@ -1,4 +1,4 @@
-# ALF Lab Builder v2.0.21
+# ALF Lab Builder v2.0.22
 
 A guided, script-based way to build a **nested Azure Local lab inside a single Azure VM**:
 a domain controller, an admin station and a 2-node Azure Local cluster, all running as
@@ -26,7 +26,7 @@ as a training exercise.
 
 The local development folder contains `ALF-Lab-Build-Guide-v1.0.24.docx`, covering the lab platform,
 cluster deployment, challenges and troubleshooting. The guide is not included in this repository
-pending privacy review. A matching 2.0.17 guide remains pending.
+pending privacy review. A matching 2.0.22 guide remains pending.
 
 ## What you get
 
@@ -67,7 +67,7 @@ Azure VM (super-host, Hyper-V)
    `LabValues.json`, generated `Rollout` files and console progress are ignored by Git; keep them local.
 2. **Open the Planning Console:** double-click `Launch-ALFLabBuilder.cmd`.
 3. **Choose your Cluster identifier** at the top of the Planning Console, then click **Apply identifier**.
-   Saved plans retain their chosen identifier when upgrading; version changes do not rename the lab. If a plan has no identifier, the release-derived default is `2015` for 2.0.17 (2.0.17). Choose exactly four digits meaningful to you; leading zeros such as `0042` are kept.
+   Saved plans retain their chosen identifier when upgrading; version changes do not rename the lab. If a plan has no identifier, the release-derived default is `2022` for 2.0.22. Choose exactly four digits meaningful to you; leading zeros such as `0042` are kept.
    **Apply identifier** updates all eleven numbered lab names and refreshes the commands; typing alone does not apply a change.
    Fill in at least your **Tenant ID** and **Subscription ID** (group 1, "Getting started"). Key vault and storage account names must still be globally unique across Azure; a four-digit identifier alone does not guarantee availability.
    Select **Check values** until everything shows OK, then **Save values** to keep your identifier and plan.
@@ -89,7 +89,7 @@ Azure VM (super-host, Hyper-V)
 | 04adm | `04adm.Host-CreateAdminStationVM.ps1` | Host VM | Creates the admin station VM |
 | 05 | `05.Host-CopyScriptsToVM.ps1` | Host VM | Copies the DC and admin station scripts into those VMs (no network needed) |
 | 06dc | `06dc.DC-SetNameAndIP.ps1` | ContosoDC1 | Static IP, time zone, computer name |
-| 07dc | `07dc.DC-CreateForest.ps1` | ContosoDC1 | Installs AD DS and DNS, creates the `contosolab.local` forest |
+| 07dc | `07dc.DC-CreateForest.ps1` | ContosoDC1 | Installs AD DS and DNS, creates the lab forest (**Management - Domain** and **Domain NetBIOS name**; default `contosolab.local` / `CONTOSOLAB`) |
 | 08dc | `08dc.DC-PostConfig.ps1` | ContosoDC1 | DNS forwarders, reverse zone, optional DHCP |
 | 08adm | `08adm.Admin-Configure.ps1` | Admin station | IP, DNS, management tools, rename and domain join |
 | 09dc | `09dc.DC-PrepareADForAzureLocal.ps1` | ContosoDC1 | Installs the AD preparation module; optionally creates the cluster OU and LCM account |
@@ -161,7 +161,7 @@ Constrained vCPUs retain the base SKU's memory/I/O and **do not reduce its base 
 
 **Section 2 host VM command:** the **Azure CLI - create host VM** row immediately after **Azure VM name** creates a Windows Server 2025 Gen2 VM with **Standard_D48als_v7** in **southcentralus**. It uses the selected subscription, the host resource group created above, VM name and administrator account. Double-click to copy, then run in interactive PowerShell after signing in with `az login --tenant <tenant ID>`, or Azure Cloud Shell (PowerShell). The administrator password is prompted, not recorded in the plan. The command includes a 256 GB OS disk and 1024 GB data disk on Premium SSD. Check SKU availability, quota and nested-virtualization support in your subscription before deploying.
 
-Use that command **or** script 00 to create the host. The new command leaves inbound RDP closed and does not configure nightly shutdown; those are additional steps in script 00, which still uses Standard_E16s_v5. Before connecting, add an approved RDP rule restricted to your source address or use your organization's approved access method. The command's region stays southcentralus even if the cluster Region value changes.
+Use that command **or** script 00 to create the host. The new command leaves inbound RDP closed and does not configure nightly shutdown; those are additional steps in script 00, which uses the same selected Host VM size but creates the VM in the cluster **Region** value. Before connecting, add an approved RDP rule restricted to your source address or use your organization's approved access method. The command's region stays southcentralus even if the cluster Region value changes.
 
 **Section 6 - Nodes ranges:** the first/last **Node IP range** and first/last **Cluster resources range** fields are grouped under **6. Nodes**, not **3. Lab network**. Their placeholders, saved IP values and subnet/range-overlap validation are unchanged.
 
@@ -185,7 +185,7 @@ These are compact role-specific views of `ALFGuestConsole.ps1`: a short descript
 
 The Host Console theme is retained: blue headers, white cards, green detected completion, blue running status, amber attention and red failures. **No student confirmation is needed.** Read-only checks inspect this guest's actual name/network, domain/services, DNS/optional DHCP, management tools, node preparation or Arc bootstrap/agent connection. Successful script exit and old confirmations are not completion proof. The AD tools card checks module installation only; optional OU/account creation is not claimed complete.
 
-**Refreshing an existing guest:** close the console, replace the host's `C:\ISO` with the complete matching rollout and retain `ALFHostConsole-Nodes.json`. Rerun **Host Console step 8** (script 05) for DC/admin and **step 10** (script 11) for nodes. Keep guest state/receipts; same-role v2.0.7 through v2.0.20 execution metadata is retained, but old confirmations are ignored. Deliver `ALFGuestStatus.ps1` and `ALFGuestDisplay.ps1` with the console/runner and role scripts. Node delivery now verifies seven required files. Never copy another node's configure script or rerun destructive guest setup merely to refresh the UI.
+**Refreshing an existing guest:** close the console, replace the host's `C:\ISO` with the complete matching rollout and retain `ALFHostConsole-Nodes.json`. Rerun **Host Console step 8** (script 05) for DC/admin and **step 10** (script 11) for nodes. Keep guest state/receipts; same-role v2.0.7 through v2.0.21 execution metadata is retained, but old confirmations are ignored. Deliver `ALFGuestStatus.ps1` and `ALFGuestDisplay.ps1` with the console/runner and role scripts. Node delivery now verifies seven required files. Never copy another node's configure script or rerun destructive guest setup merely to refresh the UI.
 
 **Node registration details:** below the Arc card, copyable read-only panels show the actual machine, tenant ID, subscription ID, resource group, region and target solution version from the delivered `14.Node-ArcRegister.ps1`. A blank target version means selection when the script runs. Beside them, `w32tm /query /status` shows the current time source, last successful synchronization, stratum and other Windows Time status, whether NTP or domain hierarchy is in use. Both refresh with status; inspection/query failures are visible. No sign-in, registration, resynchronization or time-policy changes run from these panels.
 
@@ -276,4 +276,4 @@ without typing it. Leave it empty and script 12 asks for it on each node instead
 
 ## Version
 
-**2.0.17** - see `CHANGELOG.md`. The version is shown at the top of the Lab Builder window, in `VERSION.txt`, in the zip file name and in the header of every script (`# Version: ALF Lab Builder x.y.z`), so a single file copied in on its own can be identified. **Roll out scripts** warns about any script from a different version. It goes up with every change.
+**2.0.22** - see `CHANGELOG.md`. The version is shown at the top of the Lab Builder window, in `VERSION.txt`, in the zip file name and in the header of every script (`# Version: ALF Lab Builder x.y.z`), so a single file copied in on its own can be identified. **Roll out scripts** warns about any script from a different version. It goes up with every change.

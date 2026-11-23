@@ -1,4 +1,4 @@
-﻿# Version: ALF Lab Builder 2.0.21
+﻿# Version: ALF Lab Builder 2.0.22
 # Shared host-only node selection; never edits the Planning Console plan.
 
 function Test-ALFNodeNames([string[]]$Names) {
@@ -61,7 +61,8 @@ function Save-ALFNodeNames([string]$SettingsPath, [string[]]$Names) {
     try {
         @{ NodeNames = $Names } | ConvertTo-Json | Set-Content -LiteralPath $temporary -Encoding UTF8 -ErrorAction Stop
         if (Test-Path -LiteralPath $SettingsPath) {
-            [System.IO.File]::Replace($temporary, $SettingsPath, $null)
+            #[NullString]::Value = no backup file. Plain $null becomes "" in Windows PowerShell 5.1 and Replace() throws.
+            [System.IO.File]::Replace($temporary, $SettingsPath, [NullString]::Value)
         }
         else { [System.IO.File]::Move($temporary, $SettingsPath) }
     }

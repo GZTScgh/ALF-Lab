@@ -1,24 +1,29 @@
 ﻿##############################################################
-# Version: ALF Lab Builder 2.0.21   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.0.22   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # 07dc.DC-CreateForest.ps1
-# Installs AD DS + DNS and creates the contosolab.local forest
+# Installs AD DS + DNS and creates the lab forest (planned domain, default contosolab.local)
 #
 # RUN ON: INSIDE ContosoDC1, elevated PowerShell (local Administrator)
 # RUN AS: a .ps1 FILE (.\07dc.DC-CreateForest.ps1) - pasting breaks the password prompt
 # NOTE:   the VM restarts at the end
 #
 # LEARN: A single-label name like "ContosoLAB" is not supported for AD domains.
-#        We use contosolab.local (DNS name) with NetBIOS name CONTOSOLAB, so
-#        sign-ins still look like CONTOSOLAB\username.
+#        We use a DNS name such as contosolab.local with a NetBIOS name such as CONTOSOLAB,
+#        so sign-ins still look like CONTOSOLAB\username.
 #        DSRM = Directory Services Restore Mode - the "break glass" password for AD recovery.
 ##############################################################
 
-$DomainName = "contosolab.local"
-$NetBIOS    = "CONTOSOLAB"
+$DomainName = "{{DomainFqdn}}"      #set in the Lab Builder (default contosolab.local)
+$NetBIOS    = "{{DomainNetbios}}"   #set in the Lab Builder (default CONTOSOLAB)
 $ExpectedPC = "ContosoDC1"
 
 ####### End of variables ######################
 
+
+#Stop if this is the template (values not filled in by the Lab Builder yet)
+if ("$DomainName$NetBIOS" -match '\{\{') {
+    throw "This script still has placeholders ({{...}}). Open the Planning Console (Launch-ALFLabBuilder.cmd), fill in the values, and use 'Roll out scripts'."
+}
 
 Write-Host "Creating forest $DomainName" -ForegroundColor Cyan
 
@@ -55,6 +60,6 @@ Write-Host "    Prerequisites passed" -ForegroundColor Green
 
 #Promote
 Write-Host "  Promote to domain controller (restarts automatically)" -ForegroundColor Cyan
-Write-Host "After the restart sign in as CONTOSOLAB\Administrator and run 08dc.DC-PostConfig.ps1" -ForegroundColor Green
+Write-Host "After the restart sign in as $NetBIOS\Administrator and run 08dc.DC-PostConfig.ps1" -ForegroundColor Green
 Install-ADDSForest @params -Force -WarningAction SilentlyContinue
 ################

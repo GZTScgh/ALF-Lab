@@ -1,5 +1,5 @@
 ﻿######################  12.Node-Configure.ps1  ######################
-# Version: ALF Lab Builder 2.0.21   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.0.22   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # CUSTOMISE EACH NODE - name, IP, DNS, time, Remote Desktop
 #
 # THIS FILE IS A TEMPLATE. Don't edit or run it on the host.
@@ -44,8 +44,8 @@ $LocalAdminFullName = "Second local admin account"
 $ExpectedDataDisks  = 4
 
 #Domain join (optional - asked at the end of the script)
-$DomainName     = "contosolab.local"
-$DomainOUPath   = ""                #Optional, e.g. "OU=Servers,DC=contosolab,DC=local" - leave blank for the default Computers container
+$DomainName     = "{{DomainFqdn}}"   #set in the Lab Builder
+$DomainOUPath   = ""                #Optional, e.g. "OU=Servers,DC=contosolab,DC=local" for contosolab.local - leave blank for the default Computers container
 
 ####### End of variables ######################
 
@@ -76,7 +76,7 @@ function Set-ALFOptionalGuestTimeZone([string]$RequestedId) {
 }
 
 #Stop if this is the template (values not filled in by the Lab Builder yet)
-if ("$LocalAdminName$Gateway$DNSServer1" -match '\{\{') {
+if ("$LocalAdminName$Gateway$DNSServer1$DomainName" -match '\{\{') {
     throw "This script still has placeholders ({{...}}). Open the Planning Console (Launch-ALFLabBuilder.cmd), fill in the values, and use 'Roll out scripts'."
 }
 
@@ -262,7 +262,7 @@ if ($joinChoice -match '^[Yy]$') {
     else {
         Write-Host "  Join $DomainName as $AZLnodename" -ForegroundColor Cyan
         Write-Host "  Choosing and remembering passwords is your responsibility." -ForegroundColor Yellow
-        $DomainCred = Get-Credential -Message "Domain account allowed to join computers (e.g. CONTOSOLAB\Administrator)"
+        $DomainCred = Get-Credential -Message "Domain account allowed to join computers (e.g. {{DomainNetbios}}\Administrator)"
 
         $joinParams = @{
             DomainName = $DomainName

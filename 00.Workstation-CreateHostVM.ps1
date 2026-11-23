@@ -1,5 +1,5 @@
 ﻿##############################################################
-# Version: ALF Lab Builder 2.0.21   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.0.22   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # 00.Workstation-CreateHostVM.ps1
 # Creates the Azure VM that hosts the whole nested lab
 #
@@ -9,7 +9,7 @@
 # LEARN: Why these choices
 #   - Default Standard_D48als_v7 = 48 maximum vCPUs / 96 GiB RAM; request 20 available vCPUs.
 #     Validate the maximum locally; Azure enforces supported CPU options at creation.
-#     Default guests use 78 GB (DC 2 + admin 4 + 2 nodes x 36); leave 16 GB for the host.
+#     Default guests use 78 GB (DC 2 + admin 4 + 2 nodes x 36); the 16 GB host reserve fits, leaving 18 GB.
 #   - NO "d" in the size name. A "d" size adds local temporary disks that are WIPED
 #     every time the VM is stopped (deallocated). We use a 1 TB Premium SSD instead.
 #   - RDP is opened to YOUR public IP only, never to the whole internet.

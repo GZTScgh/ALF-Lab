@@ -1,10 +1,10 @@
 ﻿##############################################################
-# Version: ALF Lab Builder 2.0.21   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.0.22   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # 09dc.DC-PrepareADForAzureLocal.ps1
 # Installs the Azure Local Active Directory preparation module, then (optionally)
 # creates the Azure Local OU and the deployment (LCM) user
 #
-# RUN ON: INSIDE ContosoDC1, signed in as CONTOSOLAB\Administrator
+# RUN ON: INSIDE ContosoDC1, signed in as {{DomainNetbios}}\Administrator
 # RUN AS: a .ps1 FILE (.\09dc.DC-PrepareADForAzureLocal.ps1) - it prompts for input
 # SAFE TO RE-RUN: the module install and the OU step both check first
 #
@@ -136,7 +136,7 @@ if ($choice -notmatch '^[Yy]$') {
 
 
 #---------- STEP 1: CHOOSE THE OU ----------
-#LEARN: The OU path is a "distinguished name" (DN) - read it right to left:
+#LEARN: The OU path is a "distinguished name" (DN) - read it right to left. For example:
 #         DC=local, DC=contosolab   = the domain contosolab.local
 #         OU={{ClusterName}}         = an OU called {{ClusterName}} at the top of that domain
 #       The OU can sit inside another OU too, e.g. "OU={{ClusterName}},OU=AzureLocal,DC=contosolab,DC=local"
@@ -172,7 +172,7 @@ if ($OUExists) {
 #       Rules: 1-20 characters, letters/numbers/-/_ only, can't start with a number or '-',
 #              can't be "admin", can't match the nodes' local admin ($NodeLocalAdmin),
 #              and must be unique for each cluster.
-#       Enter the USERNAME ONLY - no CONTOSOLAB\ prefix and no @domain.
+#       Enter the USERNAME ONLY - no {{DomainNetbios}}\ prefix and no @domain.
 Write-Host ""
 Write-Host "STEP 2 - Choose the LCM deployment account for this cluster" -ForegroundColor Cyan
 Write-Host "  Best practice: ONE LCM account per cluster, paired with the OU above." -ForegroundColor Yellow
@@ -181,7 +181,7 @@ $entry = Read-Host "  Press Enter to use it, or type a different name"
 $LCMUser = if ([string]::IsNullOrWhiteSpace($entry)) { $DefaultLCMUser } else { $entry.Trim() }
 
 #Check the name
-if ($LCMUser -match '\\|@')                               { throw "Enter the username only, without CONTOSOLAB\ or @domain" }
+if ($LCMUser -match '\\|@')                               { throw "Enter the username only, without {{DomainNetbios}}\ or @domain" }
 if ($LCMUser -notmatch '^[A-Za-z_][A-Za-z0-9_-]{0,19}$')  { throw "Name must be 1-20 letters/numbers/-/_ and can't start with a number or '-'  (you entered: $LCMUser)" }
 if ($LCMUser -eq "admin")                                 { throw "The name can't be 'admin'" }
 if ($LCMUser -eq $NodeLocalAdmin)                         { throw "The name can't be the same as the nodes' local admin ($NodeLocalAdmin)" }

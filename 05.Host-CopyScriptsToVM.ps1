@@ -1,5 +1,5 @@
 ﻿##############################################################
-# Version: ALF Lab Builder 2.0.21   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.0.22   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # 05.Host-CopyScriptsToVM.ps1
 # Copies lab scripts from the host into a VM (no clipboard or network needed)
 #
@@ -54,7 +54,6 @@ function Copy-ALFGuestConsoleShortcut {
         $shortcut.Description = $description
         $shortcut.IconLocation = 'C:\Windows\System32\shell32.dll,18'
         $shortcut.Save()
-        Set-Content -LiteralPath $temp -Stream Zone.Identifier -Value '[ZoneTransfer]', 'ZoneId=3' -ErrorAction Stop
         $destination = "C:\Users\Public\Desktop\ALF $consoleName Console.lnk"
         Copy-VMFile -Name $VMName -SourcePath $temp -DestinationPath $destination -CreateFullPath -FileSource Host -Force -ErrorAction Stop
         Write-Host "  $consoleName desktop shortcut: $destination -> $($shortcut.TargetPath)" -ForegroundColor Green

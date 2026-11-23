@@ -6,7 +6,12 @@ function Assert($Condition,[string]$Message) {
     if (-not $Condition) { throw $Message }
     $script:Passed++
 }
-foreach ($file in @(Get-ChildItem -LiteralPath $root -File -Filter '*.cmd') + @(Get-ChildItem -LiteralPath (Join-Path $root 'Rollout') -File -Filter '*.cmd')) {
+$rolloutFolder=Join-Path $root 'Rollout'
+$launchers=@(Get-ChildItem -LiteralPath $root -File -Filter '*.cmd')
+Assert ($launchers.Count -ge 5) 'The five template launchers must be present.'
+# Rollout\ is local-only (gitignored); check its generated launchers too when it exists.
+if (Test-Path -LiteralPath $rolloutFolder) { $launchers+=@(Get-ChildItem -LiteralPath $rolloutFolder -File -Filter '*.cmd') }
+foreach ($file in $launchers) {
     $bytes=[IO.File]::ReadAllBytes($file.FullName)
     Assert ([Text.Encoding]::ASCII.GetString($bytes).StartsWith('@echo off') -and -not @($bytes | Where-Object { $_ -gt 127 }).Count) "Launcher must start at @echo off without a BOM: $($file.Name)"
 }

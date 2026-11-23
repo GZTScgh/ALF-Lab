@@ -1,5 +1,5 @@
 ﻿######################  14.Node-ArcRegister.ps1  ######################
-# Version: ALF Lab Builder 2.0.21   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.0.22   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # REGISTER NODE WITH AZURE ARC
 #
 # RUN ON: INSIDE each node (SConfig option 15 -> PowerShell), one node at a time

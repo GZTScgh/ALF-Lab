@@ -1,5 +1,5 @@
 ﻿##############################################################
-# Version: ALF Lab Builder 2.0.21   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.0.22   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # ALFHostConsole.ps1   -   2. ALF Lab Builder - Host Console
 # The Host Console: a window on the lab host (the Azure VM) that runs the host-side lab
 # steps for you, shows which ones are done, and downloads the two install images with
@@ -22,7 +22,7 @@
 #        It resumes after network drops and keeps going in the background.
 ##############################################################
 
-$ALFVersion = "2.0.21"
+$ALFVersion = "2.0.22"
 
 #Lab VM names - filled in by the Planning Console's "Roll out scripts"
 $DCName            = "ContosoDC1"

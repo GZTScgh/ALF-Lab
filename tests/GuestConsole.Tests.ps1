@@ -112,7 +112,7 @@ foreach ($name in 'Save-GuestState','Update-GuestTargetVersionEditor','Apply-Gue
     . ([scriptblock]::Create($definition.Extent.Text))
 }
 function Refresh-GuestStatus {}
-$Role = 'Node'; $ALFVersion = '2.0.21'
+$Role = 'Node'; $ALFVersion = '2.0.22'
 $StateFile = Join-Path ([IO.Path]::GetTempPath()) ('ALF-TargetState-' + [guid]::NewGuid().ToString('N') + '.json')
 $script:Records = @{ Arc=@{Started='start';ResultPath='receipt'} }
 try {
@@ -200,8 +200,9 @@ try {
         @{ VM='ContosoDC1'; Launcher='Launch-ALFDCConsole.cmd'; Shortcut='ALF DC Console.lnk' },
         @{ VM='ContosoADM1'; Launcher='Launch-ALFAdminConsole.cmd'; Shortcut='ALF Admin Console.lnk' }
     )) {
-        $script:FailCopy = $false; $script:CleanedPath = ''; $script:ShortcutMock.Saved = $false
+        $script:FailCopy = $false; $script:CleanedPath = ''; $script:MarkedPath = ''; $script:ShortcutMock.Saved = $false
         Copy-ALFGuestConsoleShortcut $case.VM 'C:\ISO' $case.Launcher
+        Assert (-not $script:MarkedPath) 'Do not tag the lab-made shortcut as downloaded from the Internet (Zone.Identifier ZoneId=3).'
         Assert ($script:ShortcutMock.Saved -and $script:ShortcutMock.TargetPath -eq "C:\ISO\$($case.Launcher)" -and $script:ShortcutMock.WorkingDirectory -eq 'C:\ISO') 'Each shortcut opens its own guest launcher from the guest scripts folder.'
         Assert ($script:CopyArgs.Name -eq $case.VM -and $script:CopyArgs.Destination -eq "C:\Users\Public\Desktop\$($case.Shortcut)" -and $script:CopyArgs.Source -eq $script:TempPath) 'Deliver each launcher to its VM Public Desktop so local and domain profiles share it, not to the host.'
         Assert ($script:CopyArgs.Force -and $script:CopyArgs.CreateFullPath -and $script:CopyArgs.FileSource -eq 'Host') 'Repeat delivery refreshes the fixed guest shortcut and can create the desktop path.'

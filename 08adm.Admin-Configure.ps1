@@ -1,5 +1,5 @@
 ﻿##############################################################
-# Version: ALF Lab Builder 2.0.21   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.0.22   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # 08adm.Admin-Configure.ps1
 # Sets up the admin station: IP, DNS, management tools, then name + domain join
 #
@@ -23,7 +23,7 @@ $IPAddress  = "{{AdminStationIP}}"     #set in the Lab Builder
 $Prefix     = [int]("{{LabSubnet}}".Split("/")[1])   #taken from the lab subnet
 $Gateway    = "{{GatewayIP}}"
 $DNSServer  = "{{DCIP}}"               #the domain controller
-$DomainName = "contosolab.local"
+$DomainName = "{{DomainFqdn}}"         #set in the Lab Builder
 $TimeZone   = "{{TimeZone}}"   #Windows time zone ID - set in the Lab Builder
 $NicName    = "LAN"
 
@@ -68,7 +68,7 @@ function Set-ALFOptionalGuestTimeZone([string]$RequestedId) {
 }
 
 #Stop if this is the template (values not filled in by the Lab Builder yet)
-if ("$NewName$IPAddress$Gateway$DNSServer" -match '\{\{') {
+if ("$NewName$IPAddress$Gateway$DNSServer$DomainName" -match '\{\{') {
     throw "This script still has placeholders ({{...}}). Open the Planning Console (Launch-ALFLabBuilder.cmd), fill in the values, and use 'Roll out scripts'."
 }
 
@@ -142,7 +142,7 @@ $named  = $env:COMPUTERNAME -eq $NewName
 
 if ($joined -and $named) {
     Write-Host "  Already named $NewName and joined to the domain - nothing to do" -ForegroundColor Yellow
-    Write-Host "Admin station ready. Sign in as CONTOSOLAB\Administrator and open Failover Cluster Manager." -ForegroundColor Green
+    Write-Host "Admin station ready. Sign in as {{DomainNetbios}}\Administrator and open Failover Cluster Manager." -ForegroundColor Green
     return
 }
 
@@ -150,7 +150,7 @@ if (-not $domOK) { throw "Can't resolve $DomainName - finish the domain controll
 
 Write-Host "  Rename to $NewName and join $DomainName" -ForegroundColor Cyan
 Write-Host "  Choosing and remembering passwords is your responsibility." -ForegroundColor Yellow
-$DomainCred = Get-Credential -Message "Domain account allowed to join computers (e.g. CONTOSOLAB\Administrator)"
+$DomainCred = Get-Credential -Message "Domain account allowed to join computers (e.g. {{DomainNetbios}}\Administrator)"
 
 $joinParams = @{ DomainName = $DomainName; Credential = $DomainCred; Force = $true; ErrorAction = "Stop" }
 if (-not $named) { $joinParams.NewName = $NewName }
@@ -159,7 +159,7 @@ Write-Host "    Joined $DomainName as $NewName" -ForegroundColor Green
 
 Write-Host ""
 Write-Host "Admin station configured. A restart is needed to finish the rename and domain join." -ForegroundColor Green
-Write-Host "After the restart, sign in as CONTOSOLAB\Administrator and open Failover Cluster Manager (cluadmin.msc)." -ForegroundColor Green
+Write-Host "After the restart, sign in as {{DomainNetbios}}\Administrator and open Failover Cluster Manager (cluadmin.msc)." -ForegroundColor Green
 Write-Host "Would you like to restart now? (Y/N)" -ForegroundColor Red -BackgroundColor Yellow
 if ((Read-Host "Enter Y or N") -match '^[Yy]$') { Restart-Computer -Force }
 ################

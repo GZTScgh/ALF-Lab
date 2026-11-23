@@ -1,4 +1,4 @@
-# Version: ALF Lab Builder 2.0.21
+# Version: ALF Lab Builder 2.0.22
 # Read-only guest checks. Configuration scripts are inspected, never executed.
 
 $ALFExpectedClusterName = '{{ClusterName}}'
@@ -312,7 +312,7 @@ function Resolve-ALFGuestTaskState($Check, $Record, [bool]$Running, $Receipt, [s
 }
 
 function ConvertTo-ALFGuestRecords($Saved, [string]$Role, [string]$Version, [string[]]$Ids) {
-    $compatible = @($Version, '2.0.7', '2.0.8', '2.0.9', '2.0.10', '2.0.11', '2.0.12', '2.0.13', '2.0.14', '2.0.15', '2.0.16', '2.0.17', '2.0.18', '2.0.19', '2.0.20')
+    $compatible = @($Version, '2.0.7', '2.0.8', '2.0.9', '2.0.10', '2.0.11', '2.0.12', '2.0.13', '2.0.14', '2.0.15', '2.0.16', '2.0.17', '2.0.18', '2.0.19', '2.0.20', '2.0.21')
     if ($Saved.Role -ne $Role -or $Saved.Version -notin $compatible -or
         ($Saved.SchemaVersion -and $Saved.SchemaVersion -notin 1, 2) -or -not $Saved.Steps) {
         throw 'State belongs to another role/release, or has an unsupported schema.'

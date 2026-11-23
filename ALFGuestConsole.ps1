@@ -1,8 +1,8 @@
-# Version: ALF Lab Builder 2.0.21
+# Version: ALF Lab Builder 2.0.22
 # Shared DC/admin/node console. Completion is detected from this guest.
 param([Parameter(Mandatory = $true)][ValidateSet('DC', 'Admin', 'Node')][string]$Role)
 
-$ALFVersion = '2.0.21'
+$ALFVersion = '2.0.22'
 $Here = $PSScriptRoot
 try {
     Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase -ErrorAction Stop
@@ -220,12 +220,12 @@ function Start-GuestStep([string]$Id) {
         $runner = Join-Path $Here 'ALFGuestStepRunner.ps1'
         if (-not (Test-Path -LiteralPath $runner -PathType Leaf)) { throw 'ALFGuestStepRunner.ps1 is missing.' }
         Save-GuestState
-        $args = "-NoProfile -STA -File `"$runner`" -ScriptPath `"$(Join-Path $Here $task.Script)`" -ResultPath `"$resultPath`""
+        $argList = "-NoProfile -STA -File `"$runner`" -ScriptPath `"$(Join-Path $Here $task.Script)`" -ResultPath `"$resultPath`""
         if ($Role -eq 'Node' -and $Id -eq 'Arc' -and $script:NodeTargetVersion) {
             $target = ConvertTo-ALFGuestTargetVersion $script:NodeTargetVersion
-            $args += " -TargetSolutionVersionOverride `"$target`""
+            $argList += " -TargetSolutionVersionOverride `"$target`""
         }
-        $process = Start-Process powershell.exe -ArgumentList $args -WorkingDirectory $Here -PassThru -ErrorAction Stop
+        $process = Start-Process powershell.exe -ArgumentList $argList -WorkingDirectory $Here -PassThru -ErrorAction Stop
         $script:Processes[$Id] = $process
         $script:Records[$Id].ProcessId = $process.Id
         $script:Records[$Id].ProcessStarted = $process.StartTime.ToUniversalTime().ToString('o')

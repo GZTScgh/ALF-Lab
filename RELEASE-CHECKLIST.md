@@ -1,4 +1,12 @@
-﻿# ALF Lab Builder v2.0.21 - release checklist
+# ALF Lab Builder v2.0.22 - release checklist
+
+- [ ] Planning Console: **Management - Domain** and **Domain NetBIOS name** fill 07dc/08dc/08adm/09dc/12 on rollout; no `contosolab` literals remain when a different domain is planned. Older plans gain a `DomainNetbios` row derived from the domain's first label.
+- [ ] **Check values** flags an OU path that does not end with the planned domain's DN, and a NetBIOS name that is not 1-15 valid characters.
+- [ ] **Roll out scripts** is blocked when any secret value (passwords) contains a single quote; other values are unchanged.
+- [ ] Script 15 policy review accepts only listed numeric choices, ignores duplicates and never indexes with text input.
+- [ ] Host Console step 9: apply node names twice in one session; the second Apply succeeds (typed-null `File.Replace` backup argument).
+- [ ] Host script 05 DC/Admin Public Desktop shortcuts carry no Internet zone mark (no `Zone.Identifier` stream).
+- [ ] Run all nine `tests\*.Tests.ps1` in an approved STA PowerShell session from a checkout without a `Rollout` folder; all pass.
 
 - [ ] Host VM size (SKU) is first in section 2 after load/migration/save; all other field order and values remain unchanged.
 
@@ -18,7 +26,7 @@
 
 
 - [ ] Guest consoles have only runnable cards (DC 4, Admin 1, Node 2), concise descriptions, detected status and Run/Open script; keep the Host Console green/blue theme. No manual readiness/confirmation cards remain.
-- [ ] Same-role v2.0.7 through v2.0.20 state retains process/receipt metadata, not old confirmation proof. Reject unsupported role/schema; verify PID plus UTC start time and visible launch/probe/receipt failures. Check compact layout at 1024- and 1300-pixel window widths.
+- [ ] Same-role v2.0.7 through v2.0.21 state retains process/receipt metadata, not old confirmation proof. Reject unsupported role/schema; verify PID plus UTC start time and visible launch/probe/receipt failures. Check compact layout at 1024- and 1300-pixel window widths.
 - [ ] Windows PowerShell: create DC state, then save Forest progress into that existing file. Typed-null File.Replace must succeed and preserve Network progress; failed temporary writes must preserve the original. Accept v2.0.19 state and node overrides without a reset. Run console/status regressions normally in an approved session.
 - [ ] Actual settings, not exit code alone, determine Done: DC identity/domain/DNS/optional DHCP; Admin identity/domain/tools; generated node identity/network/admin/storage; successful Arc bootstrap plus connected agent at the planned target. DC networking stays done after self-DNS configuration.
 - [ ] Node-only read-only Arc values and NTP/domain time-status panels sit below the Arc card at 1024/1300 widths. Copyable tenant/subscription/RG/region/target version match the delivered script; machine is the actual node. Edited/pinned inputs refresh; a blank target prompts selection only during script execution. Time source/last sync/stratum come from `w32tm /query /status`, never a resync. Missing/unfilled/dynamic settings and failed/empty time queries are explicit; one failed panel does not hide the other.
@@ -51,7 +59,7 @@
 - [ ] Host Console step 9: apply Node3/Node4 names, restart the console, and verify the same pair appears in creation, preparation and per-node configure scripts. Original plan/IP order remain unchanged.
 - [ ] Reject duplicate/invalid/reserved names; block both node steps with unapplied edits and prevent changing names during a running host step.
 - [ ] A previous pair's run history must not complete the newly selected pair; existing VMs must not be renamed or deleted.
-- [ ] Copy `ALFNodeSettings.ps1` with all v2.0.21 host files; retain the host-local `ALFHostConsole-Nodes.json` during refresh.
+- [ ] Copy `ALFNodeSettings.ps1` with all v2.0.22 host files; retain the host-local `ALFHostConsole-Nodes.json` during refresh.
 
 Complete these before publishing. Items marked **[untested]** were changed for the release
 and haven't been run end to end yet.
@@ -66,13 +74,13 @@ and haven't been run end to end yet.
 - [ ] Section 2: **Azure CLI - create host VM** is immediately after **Azure VM name**; double-click copies a PowerShell-compatible command with the plan's subscription, host RG, VM name and administrator account
 - [ ] Applying a student identifier updates the VM command; missing values show **Fill values**. VM region stays **southcentralus**, size **Standard_D48als_v7**; no password is embedded and **--nsg-rule NONE** keeps inbound RDP closed
 - [ ] **[untested]** Deploy the new VM command only after verifying regional SKU availability, quota and nested virtualization; add approved restricted access and shutdown configuration separately. Do not also run script 00 to create the same VM
-- [ ] Cluster identifier defaults to **2001** (version 2.0.01); typing alone leaves all numbered names unchanged and shows **Not applied**
+- [ ] Cluster identifier defaults to **2022** (version 2.0.22); typing alone leaves all numbered names unchanged and shows **Not applied**
 - [ ] **Apply identifier** updates all eleven naming fields and CLI/command previews; no unrelated values change
 - [ ] Save/reload and Export for sharing retain identifier and naming templates; leading zeros (e.g. **0042**) are preserved
 - [ ] Invalid/partial/non-ASCII identifiers and unapplied changes block save, command copy/file generation, Azure preparation and rollout; close-and-save stays open
 - [ ] Regenerated rollout uses the applied identifier everywhere; no stale 2105/1024 lab names remain (1024 GB disks are unchanged)
 - [ ] Older plans load without retargeting names; applying a new identifier preserves prefixes/suffixes and nested OU parents
-- [ ] **[untested]** Fresh PC: unblock the files, launch `Launch-ALFLabBuilder.cmd`; the version badge at the top shows *Version 2.0.17*
+- [ ] **[untested]** Fresh PC: unblock the files, launch `Launch-ALFLabBuilder.cmd`; the version badge at the top shows *Version 2.0.22*
 - [ ] **[untested]** Window titles and headings read `1. ALF Lab Builder - Planning Console` and `2. ALF Lab Builder - Host Console`
 - [ ] Tenant ID and Subscription ID show **Missing** until filled in
 - [ ] **Check values** - everything OK once the IDs are entered
@@ -103,15 +111,15 @@ and haven't been run end to end yet.
       `Select-String -Path .\* -Pattern '<your tenant id>','<your subscription id>','<your user name>'`
 - [ ] No `Rollout` folder, `LabValues.shareable.json`, logs or CSV reports in the package
 - [ ] `LabValues.json` Settings folders are empty and the second local admin password is empty
-- [ ] **[pending]** Update the source guide `ALF-Lab-Build-Guide-v1.0.24.docx` with the new identifier workflow, then publish `ALF-Lab-Build-Guide-v2.0.17.docx` with matching title page, page header and Appendix D. Saved plans retain their chosen four-digit identifier; missing identifiers default to 2015.
+- [ ] **[pending]** Update the source guide `ALF-Lab-Build-Guide-v1.0.24.docx` with the new identifier workflow, then publish `ALF-Lab-Build-Guide-v2.0.22.docx` with matching title page, page header and Appendix D. Saved plans retain their chosen four-digit identifier; missing identifiers default to 2022.
 
 ## Version
 - [ ] Version is the same everywhere: Lab Builder (`$ALFVersion`), `LabValues.json`, `VERSION.txt`, README, CHANGELOG, zip and folder name
-- [ ] Every script header has the same version stamp: `Select-String -Path .\*.ps1,.\*.cmd,.\*.txt -Pattern 'Version: ALF Lab Builder' | Where-Object Line -notmatch '2\.0\.1'` returns nothing
+- [ ] Every script header has the same version stamp: `Select-String -Path .\*.ps1,.\*.cmd,.\*.txt -Pattern 'Version: ALF Lab Builder' | Where-Object Line -notmatch '2\.0\.22'` returns nothing
 - [ ] **[untested]** Roll out scripts with one script from an older release: the log shows a version WARNING for it
 
 ## Decide before publishing
 - [ ] **Licence** - add a `LICENSE` file (e.g. MIT) so others know how they may use it
 - [ ] **Where it's published** - GitHub repository, file share, or internal site
 - [ ] **Support statement** - who to contact, and that it's provided as-is
-- [ ] Host VM size in script 00 (`Standard_E16s_v5`) - keep, or change to the size you tested
+- [ ] Default Host VM size (`Standard_D48als_v7`, Planning Console section 2, used by the CLI command and script 00) - keep, or change to the size you tested

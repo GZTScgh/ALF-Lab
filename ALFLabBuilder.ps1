@@ -1,5 +1,5 @@
 ﻿##############################################################
-# Version: ALF Lab Builder 2.0.21   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.0.22   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # ALFLabBuilder.ps1   -   1. ALF Lab Builder - Planning Console
 # A simple window for keeping track of every value the Azure Local lab needs,
 # and "rolling out" the lab scripts with those values filled in.
@@ -23,7 +23,7 @@ param(
     [string]$ValuesFile = (Join-Path $PSScriptRoot "LabValues.json")
 )
 
-$ALFVersion = "2.0.21"   #increment on EVERY change (also LabValues.json, VERSION.txt, CHANGELOG.md)
+$ALFVersion = "2.0.22"   #increment on EVERY change (also LabValues.example.json, VERSION.txt, CHANGELOG.md)
 . (Join-Path $PSScriptRoot 'ALFHostSizing.ps1')
 . (Join-Path $PSScriptRoot 'ALFGuestSizing.ps1')
 $script:HostSkus = @()
@@ -371,6 +371,43 @@ function Get-CurrentJson {
     $doc | ConvertTo-Json -Depth 6
 }
 
+function Get-ALFDomainNetbiosRow([string]$DomainFqdn) {
+    $netbios = $DomainFqdn.Split('.')[0].ToUpperInvariant()
+    if ($netbios.Length -gt 15) { $netbios = $netbios.Substring(0, 15) }
+    [pscustomobject]@{
+        Key = 'DomainNetbios'; Group = '5. Active Directory'; Label = 'Domain NetBIOS name'; Value = $netbios
+        Description = 'The short (NetBIOS) name of the lab domain, used for sign-ins like CONTOSOLAB\Administrator. 07dc.DC-CreateForest.ps1 creates the domain with this name and the domain name in section 7 (Management - Domain). Usually the first part of the domain name in capitals. Choose it before 07dc runs - it cannot be changed afterwards.'
+        Example = 'CONTOSOLAB'; Pattern = '^(?=.*[A-Za-z])[A-Za-z0-9-]{1,15}$'
+        Hint = '1-15 letters, numbers or hyphens, with at least one letter, e.g. CONTOSOLAB'
+        UsedIn = '07dc.DC-CreateForest.ps1, 08dc.DC-PostConfig.ps1, 08adm.Admin-Configure.ps1, 09dc.DC-PrepareADForAzureLocal.ps1, 12.Node-Configure.ps1'
+        DifferentFrom = ''; Type = ''; Command = ''; Private = $false
+    }
+}
+
+function Initialize-ALFDomainPlan($Plan) {
+    #Plans from 2.0.21 and older have no NetBIOS row - add it at the top of section 5, taken from the domain name
+    $domain = $Plan.Values | Where-Object Key -eq 'DomainFqdn' | Select-Object -First 1
+    if (-not $domain) { return }
+    if ($domain.Description -match 'typed in') {
+        $domain.Description = 'Management tab. The Active Directory domain the nodes join. 07dc.DC-CreateForest.ps1 creates it, and the other lab scripts use it. Choose it before 07dc runs - the OU path in section 5 must end with this domain.'
+        $domain.UsedIn = 'Azure portal deployment wizard, 07dc.DC-CreateForest.ps1, 08dc.DC-PostConfig.ps1, 08adm.Admin-Configure.ps1, 12.Node-Configure.ps1'
+    }
+    if ($Plan.Values | Where-Object Key -eq 'DomainNetbios') { return }
+    $netbiosRow = Get-ALFDomainNetbiosRow ([string]$domain.Value)
+    $rows = @()
+    $added = $false
+    foreach ($row in $Plan.Values) {
+        if (-not $added -and $row.Key -eq 'OUPath') { $rows += $netbiosRow; $added = $true }
+        $rows += $row
+    }
+    if (-not $added) { $rows += $netbiosRow }
+    $Plan.Values = $rows
+}
+
+function Get-ALFDomainDN([string]$DomainFqdn) {
+    return (($DomainFqdn.Split('.') | ForEach-Object { "DC=$_" }) -join ',')
+}
+
 function Load-Values {
     if (-not (Test-Path $ValuesFile)) {
         [System.Windows.MessageBox]::Show("Can't find $ValuesFile", "1. ALF Lab Builder - Planning Console") | Out-Null
@@ -379,6 +416,7 @@ function Load-Values {
     $script:LabData = Get-Content $ValuesFile -Raw | ConvertFrom-Json
     Initialize-ALFHostSizingPlan $script:LabData
     Initialize-ALFGuestSizingPlan $script:LabData
+    Initialize-ALFDomainPlan $script:LabData
     $identifier = [string]$script:LabData.ClusterIdentifier
     if (-not $identifier) {
         $cluster = $script:LabData.Values | Where-Object Key -eq 'ClusterName' | Select-Object -First 1
@@ -444,6 +482,7 @@ function Save-Values {
     $disk = Get-Content $ValuesFile -Raw | ConvertFrom-Json
     Initialize-ALFHostSizingPlan $disk
     Initialize-ALFGuestSizingPlan $disk
+    Initialize-ALFDomainPlan $disk
     foreach ($v in @($disk.Values)) {
         if ($onScreen.ContainsKey($v.Key)) { $v.Value = $onScreen[$v.Key] }
         $row = $items | Where-Object Key -eq $v.Key | Select-Object -First 1
@@ -655,6 +694,11 @@ function Test-Values([switch]$Quiet) {
             $i.Status = "Check rule"; $problems++
             if (-not $Quiet) { Write-Log "INVALID  $($i.Label) can't be 'admin'" }
         }
+        elseif ($i.Key -eq "OUPath" -and $byKey.DomainFqdn.Value -and $i.Value -notmatch (',' + [regex]::Escape((Get-ALFDomainDN $byKey.DomainFqdn.Value)) + '$')) {
+            #LEARN: 09dc only creates the OU inside the lab domain, so the OU path must end with the domain's DC= parts
+            $i.Status = "Check rule"; $problems++
+            if (-not $Quiet) { Write-Log "INVALID  $($i.Label) '$($i.Value)' must end with $(Get-ALFDomainDN $byKey.DomainFqdn.Value) (the domain $($byKey.DomainFqdn.Value))" }
+        }
         else { $i.Status = "OK" }
     }
     if (-not (Update-HostSizingStatus)) { $problems++; if (-not $Quiet) { Write-Log ('INVALID HOST SIZING: ' + ($items | Where-Object Key -eq 'HostAvailableVcpus').Hint) } }
@@ -760,6 +804,12 @@ function Invoke-Rollout {
     if (-not (Set-ClusterIdentifier)) { return }
     if (-not (Update-HostSizingStatus)) { Write-Log ('Rollout blocked: ' + ($items | Where-Object Key -eq 'HostAvailableVcpus').Hint); return }
     if (-not (Update-LabSizingStatus)) { Write-Log ('Rollout blocked: ' + $ui.txtSizingSummary.Text); return }
+    #Secrets are rolled out inside '...' strings - a single quote would break the script, so never allow it
+    $quotedSecret = @($items | Where-Object { $_.Type -eq "secret" -and $_.Value -match "'" })
+    if ($quotedSecret.Count) {
+        Write-Log ("Rollout blocked: {0} can't contain a single quote ('). Change it and roll out again." -f (($quotedSecret | ForEach-Object Label) -join ', '))
+        return
+    }
     if ((Test-Values) -gt 0) {
         $answer = [System.Windows.MessageBox]::Show("Some values are missing or invalid. Roll out anyway?`n`nPlaceholders without a value are left as {{...}} in the scripts.",
             "1. ALF Lab Builder - Planning Console", "YesNo", "Warning")

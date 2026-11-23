@@ -99,20 +99,27 @@ function Get-Volume {
     param($DriveLetter)
     [pscustomobject]@{ DriveLetter = $DriveLetter }
 }
-$hostScript = Join-Path $root 'Rollout\01.Host-PrepareDataDisk.ps1'
-foreach ($failure in 'Set', 'Lookup', 'MissingFallback') {
-    $script:CreatedFolders = [Collections.Generic.List[string]]::new()
-    $script:Messages.Clear(); $script:SetCalls.Clear(); $script:CurrentZone = 'UTC'
-    $script:LookupFails = $failure -eq 'Lookup'; $script:SetFails = $failure -eq 'Set'
-    $script:DiskFails = $false
-    $script:Zones = if ($failure -eq 'MissingFallback') { @('UTC') } else { @('Eastern Standard Time') }
-    & $hostScript -DiskOnly | Out-Null
-    Assert ($script:CreatedFolders -contains 'C:\ISO' -and $script:CreatedFolders -contains 'F:\VMs') 'Host step 1 must continue to prepare folders after an optional time-zone failure.'
-    Assert (@($script:Messages | Where-Object { $_ -match 'Data disk ready' }).Count -eq 1) 'The actual -DiskOnly entry point must finish after a time-zone failure.'
+# Test a filled-in copy of the template (Rollout\ is local-only). Dot-source it so the mocks keep this script's $script: state.
+$hostScript = Join-Path ([IO.Path]::GetTempPath()) ('ALF-HostTimeZone-' + [guid]::NewGuid().ToString('N') + '.ps1')
+$hostText = (Get-Content -LiteralPath (Join-Path $root '01.Host-PrepareDataDisk.ps1') -Raw).Replace('{{TimeZone}}', 'Manitoba Standard Time')
+[IO.File]::WriteAllText($hostScript, $hostText, [Text.UTF8Encoding]::new($true))
+try {
+    foreach ($failure in 'Set', 'Lookup', 'MissingFallback') {
+        $script:CreatedFolders = [Collections.Generic.List[string]]::new()
+        $script:Messages.Clear(); $script:SetCalls.Clear(); $script:CurrentZone = 'UTC'
+        $script:LookupFails = $failure -eq 'Lookup'; $script:SetFails = $failure -eq 'Set'
+        $script:DiskFails = $false
+        $script:Zones = if ($failure -eq 'MissingFallback') { @('UTC') } else { @('Eastern Standard Time') }
+        . $hostScript -DiskOnly | Out-Null
+        Assert ($script:CreatedFolders -contains 'C:\ISO' -and $script:CreatedFolders -contains 'F:\VMs') 'Host step 1 must continue to prepare folders after an optional time-zone failure.'
+        Assert (@($script:Messages | Where-Object { $_ -match 'Data disk ready' }).Count -eq 1) 'The actual -DiskOnly entry point must finish after a time-zone failure.'
+        Assert (@($script:Messages | Where-Object { $_ -match 'Optional time-zone change skipped|Manitoba Standard Time.*unavailable' }).Count -ge 1) 'Host step 1 must reach the optional time-zone handler.'
+    }
+    $script:DiskFails = $true
+    $diskFailed = $false
+    try { . $hostScript -DiskOnly | Out-Null }
+    catch { $diskFailed = $_.Exception.Message -eq 'Simulated disk failure' }
+    Assert $diskFailed 'Real disk-preparation failures must still fail host step 1.'
 }
-$script:DiskFails = $true
-$diskFailed = $false
-try { & $hostScript -DiskOnly | Out-Null }
-catch { $diskFailed = $_.Exception.Message -eq 'Simulated disk failure' }
-Assert $diskFailed 'Real disk-preparation failures must still fail host step 1.'
+finally { Remove-Item -LiteralPath $hostScript -Force -ErrorAction SilentlyContinue }
 Write-Output "PASS: $script:Passed host/guest time-zone checks; all three guest roles and host -DiskOnly, no system changes."

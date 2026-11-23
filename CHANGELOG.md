@@ -3,6 +3,15 @@
 The version goes up with every change. It's shown at the top of the Lab Builder window,
 in `VERSION.txt` and in the zip file name (`ALF-LabBuilder-v<version>.zip`).
 
+## 2.0.22
+- Roll out the planned domain: 07dc, 08dc, 08adm, 09dc and 12 now use **Management - Domain** and a new **Domain NetBIOS name** value instead of fixed `contosolab.local` / `CONTOSOLAB`. Older plans gain the NetBIOS row from the domain's first label; **Check values** flags an OU path outside the planned domain.
+- Fix applying Host Console node names a second time: pass a typed .NET null backup path to `File.Replace` in `ALFNodeSettings.ps1`, matching the 2.0.20 guest-state fix.
+- Script 15 accepts only listed policy numbers once each; `0` no longer selects the last policy.
+- Stop marking DC/Admin Public Desktop shortcuts as Internet-zone files; rename a guest-console variable that shadowed PowerShell's automatic `$args`.
+- Block rollout when a password contains a single quote, which would break the generated script string.
+- Reset the starter plan to the shipped defaults (D48als_v7, 20 vCPUs/96 GB, identifier 2022); correct the guest-sizing comments in scripts 00/01.
+- Make the time-zone, launcher-encoding and node-selection tests run from a clean checkout without a `Rollout` folder; retain same-role v2.0.21 progress and node overrides.
+
 ## 2.0.21
 - Remove automatic DC/Admin resolution changes when opening the console. Keep the optional 1600 x 900 display button, supported-mode checks and manual-request warnings.
 - Add a manual-only invocation regression, retain same-role v2.0.20 progress and node overrides, and refresh the matching rollout without changing private planning values or Public Desktop shortcuts.

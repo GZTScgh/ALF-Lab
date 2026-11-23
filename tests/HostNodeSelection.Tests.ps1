@@ -84,11 +84,20 @@ try {
     Assert-Throws { Set-HostNodeNames $planned } 'Apply must reject changes during a running step.'
     $script:Running = $null
 
+    # Fill the templates from the starter plan (Rollout\ is local-only), then run only their node-name/IP setup assignments.
+    $planValues = @{}
+    (Get-Content -LiteralPath (Join-Path $root 'LabValues.example.json') -Raw | ConvertFrom-Json).Values |
+        Where-Object Key -in 'NodeName1', 'NodeName2', 'NodeIPStart', 'NodeIPEnd' | ForEach-Object { $planValues[$_.Key] = [string]$_.Value }
     foreach ($file in '10.Host-CreateNodeVMs.ps1', '11.Host-PrepareNodes.ps1') {
-        $content = Get-Content -LiteralPath (Join-Path $root ('Rollout\' + $file)) -Raw
-        $cut = $content.IndexOf('Write-Host ')
-        $prefix = $content.Substring(0, $cut).Replace(". (Join-Path `$PSScriptRoot 'ALFNodeSettings.ps1')", '').Replace('$PSScriptRoot', '$fixtureRoot')
-        . ([scriptblock]::Create($prefix))
+        $content = Get-Content -LiteralPath (Join-Path $root $file) -Raw
+        foreach ($key in $planValues.Keys) { $content = $content.Replace('{{' + $key + '}}', $planValues[$key]) }
+        $fileTokens = $null; $fileErrors = $null
+        $fileAst = [Management.Automation.Language.Parser]::ParseInput($content, [ref]$fileTokens, [ref]$fileErrors)
+        $nameVariable = if ($file.StartsWith('10.')) { '$NodeNameList' } else { '$NodeNames' }
+        $setup = @($fileAst.EndBlock.Statements | Where-Object { $_ -is [Management.Automation.Language.AssignmentStatementAst] -and $_.Left.Extent.Text -in $nameVariable, '$NodeIPStart', '$NodeIPEnd', '$startBytes', '$endLast' })
+        Assert ($setup.Count -ge 2 -and $setup[1].Extent.Text -match 'Get-ALFNodeNames') "$file must reload the saved node selection after its planned names."
+        $prefix = ($setup | ForEach-Object { $_.Extent.Text }) -join "`n"
+        . ([scriptblock]::Create($prefix.Replace('$PSScriptRoot', '$fixtureRoot')))
         $actual = if ($file.StartsWith('10.')) { $NodeNameList } else { $NodeNames }
         Assert (($actual -join '|') -eq ($selected -join '|')) "Manual $file must use the same selected pair."
     }

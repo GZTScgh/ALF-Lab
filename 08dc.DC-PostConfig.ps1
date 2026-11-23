@@ -1,9 +1,9 @@
 ﻿##############################################################
-# Version: ALF Lab Builder 2.0.21   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.0.22   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # 08dc.DC-PostConfig.ps1
 # DNS and (optional) DHCP for the lab after the forest is created
 #
-# RUN ON: INSIDE ContosoDC1, signed in as CONTOSOLAB\Administrator
+# RUN ON: INSIDE ContosoDC1, signed in as {{DomainNetbios}}\Administrator
 #
 # LEARN:
 #   DNS forwarders - the DC answers lab names itself and forwards internet names.
@@ -27,13 +27,13 @@ $DhcpEnd     = "{{DhcpEnd}}"
 $DhcpMask    = "255.255.255.0"
 $DhcpScopeId = ($ReverseNet -split "/")[0]   #network address of the lab subnet
 $Gateway     = "{{GatewayIP}}"   #set in the Lab Builder
-$DnsDomain   = "contosolab.local"
+$DnsDomain   = "{{DomainFqdn}}"   #set in the Lab Builder
 
 ####### End of variables ######################
 
 
 #Stop if this is the template (values not filled in by the Lab Builder yet)
-if ("$DCIP$ReverseNet$Gateway$DhcpStart$DhcpEnd" -match '\{\{') {
+if ("$DCIP$ReverseNet$Gateway$DhcpStart$DhcpEnd$DnsDomain" -match '\{\{') {
     throw "This script still has placeholders ({{...}}). Open the Planning Console (Launch-ALFLabBuilder.cmd), fill in the values, and use 'Roll out scripts'."
 }
 

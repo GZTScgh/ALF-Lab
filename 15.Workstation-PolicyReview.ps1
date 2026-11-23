@@ -1,5 +1,5 @@
 ﻿##############################################################
-# Version: ALF Lab Builder 2.0.21   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.0.22   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # 15.Workstation-PolicyReview.ps1
 # Shows exactly which Azure Policies act on the registered Azure Local nodes (Arc machines),
 # and - with approval - creates exemptions for the cluster resource group
@@ -159,8 +159,8 @@ $pick = Read-Host "Enter the numbers to exempt (e.g. 1,3), or press Enter to ski
 if ([string]::IsNullOrWhiteSpace($pick)) { Write-Host "No exemptions created." -ForegroundColor Cyan; return }
 
 $Expires = (Get-Date).ToUniversalTime().AddDays($ExemptionDays).ToString("yyyy-MM-ddT00:00:00Z")
-$Chosen  = @($pick.Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '^\d+$' } |
-             ForEach-Object { $Review[[int]$_ - 1] } | Where-Object { $_ })
+$Chosen  = @($pick.Split(",") | ForEach-Object { $_.Trim() } | Where-Object { $_ -match '^\d+$' -and [int]$_ -ge 1 -and [int]$_ -le $Review.Count } |
+             Select-Object -Unique | ForEach-Object { $Review[[int]$_ - 1] })
 
 #One exemption per assignment; for initiatives, list the member policies being exempted
 foreach ($group in ($Chosen | Group-Object AssignmentId)) {
