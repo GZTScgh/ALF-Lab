@@ -3,6 +3,12 @@
 The version goes up with every change. It's shown at the top of the Lab Builder window,
 in `VERSION.txt` and in the zip file name (`ALF-LabBuilder-v<version>.zip`).
 
+## 2.0.23
+- Rename the Node Console **Next run** box to **Target version (next Arc run)**. Behavior is unchanged: Apply saves the override only on that node, and it is used the next time Arc runs.
+- Show the Azure Local version format under the box (`12.YYMM.Build.Revision`, e.g. `12.2610.1004.50`, `12.2602.1002.501`) and a part-by-part tooltip, with a pointer to the Microsoft Learn page *Azure Local release information* for releases newer than the examples. The details panel stays visible without scrolling at 1024 x 768.
+- Explain the same convention in script 14's LEARN notes, the README and the invalid-version message, replacing the unpublished example `12.2602.1002.10` with published versions.
+- Bundled cluster identifier 2023; retain same-role v2.0.22 progress and node overrides.
+
 ## 2.0.22
 - Roll out the planned domain: 07dc, 08dc, 08adm, 09dc and 12 now use **Management - Domain** and a new **Domain NetBIOS name** value instead of fixed `contosolab.local` / `CONTOSOLAB`. Older plans gain the NetBIOS row from the domain's first label; **Check values** flags an OU path outside the planned domain.
 - Fix applying Host Console node names a second time: pass a typed .NET null backup path to `File.Replace` in `ALFNodeSettings.ps1`, matching the 2.0.20 guest-state fix.

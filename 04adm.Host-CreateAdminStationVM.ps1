@@ -1,5 +1,5 @@
 ﻿##############################################################
-# Version: ALF Lab Builder 2.0.22   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.0.23   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # 04adm.Host-CreateAdminStationVM.ps1
 # Creates the admin station VM from the Server 2025 evaluation VHDX
 #

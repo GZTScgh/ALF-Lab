@@ -1,5 +1,5 @@
 ﻿##############################################################
-# Version: ALF Lab Builder 2.0.22   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.0.23   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # ALFLabBuilder.ps1   -   1. ALF Lab Builder - Planning Console
 # A simple window for keeping track of every value the Azure Local lab needs,
 # and "rolling out" the lab scripts with those values filled in.
@@ -23,7 +23,7 @@ param(
     [string]$ValuesFile = (Join-Path $PSScriptRoot "LabValues.json")
 )
 
-$ALFVersion = "2.0.22"   #increment on EVERY change (also LabValues.example.json, VERSION.txt, CHANGELOG.md)
+$ALFVersion = "2.0.23"   #increment on EVERY change (also LabValues.example.json, VERSION.txt, CHANGELOG.md)
 . (Join-Path $PSScriptRoot 'ALFHostSizing.ps1')
 . (Join-Path $PSScriptRoot 'ALFGuestSizing.ps1')
 $script:HostSkus = @()

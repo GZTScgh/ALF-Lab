@@ -1,4 +1,4 @@
-﻿# Version: ALF Lab Builder 2.0.22
+﻿# Version: ALF Lab Builder 2.0.23
 # Shared planning and creation checks for the four nested guests.
 function Get-ALFGuestSizingFields {
     @(

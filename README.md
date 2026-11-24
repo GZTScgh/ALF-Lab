@@ -1,4 +1,4 @@
-# ALF Lab Builder v2.0.22
+# ALF Lab Builder v2.0.23
 
 A guided, script-based way to build a **nested Azure Local lab inside a single Azure VM**:
 a domain controller, an admin station and a 2-node Azure Local cluster, all running as
@@ -26,7 +26,7 @@ as a training exercise.
 
 The local development folder contains `ALF-Lab-Build-Guide-v1.0.24.docx`, covering the lab platform,
 cluster deployment, challenges and troubleshooting. The guide is not included in this repository
-pending privacy review. A matching 2.0.22 guide remains pending.
+pending privacy review. A matching 2.0.23 guide remains pending.
 
 ## What you get
 
@@ -67,7 +67,7 @@ Azure VM (super-host, Hyper-V)
    `LabValues.json`, generated `Rollout` files and console progress are ignored by Git; keep them local.
 2. **Open the Planning Console:** double-click `Launch-ALFLabBuilder.cmd`.
 3. **Choose your Cluster identifier** at the top of the Planning Console, then click **Apply identifier**.
-   Saved plans retain their chosen identifier when upgrading; version changes do not rename the lab. If a plan has no identifier, the release-derived default is `2022` for 2.0.22. Choose exactly four digits meaningful to you; leading zeros such as `0042` are kept.
+   Saved plans retain their chosen identifier when upgrading; version changes do not rename the lab. If a plan has no identifier, the release-derived default is `2023` for 2.0.23. Choose exactly four digits meaningful to you; leading zeros such as `0042` are kept.
    **Apply identifier** updates all eleven numbered lab names and refreshes the commands; typing alone does not apply a change.
    Fill in at least your **Tenant ID** and **Subscription ID** (group 1, "Getting started"). Key vault and storage account names must still be globally unique across Azure; a four-digit identifier alone does not guarantee availability.
    Select **Check values** until everything shows OK, then **Save values** to keep your identifier and plan.
@@ -185,11 +185,11 @@ These are compact role-specific views of `ALFGuestConsole.ps1`: a short descript
 
 The Host Console theme is retained: blue headers, white cards, green detected completion, blue running status, amber attention and red failures. **No student confirmation is needed.** Read-only checks inspect this guest's actual name/network, domain/services, DNS/optional DHCP, management tools, node preparation or Arc bootstrap/agent connection. Successful script exit and old confirmations are not completion proof. The AD tools card checks module installation only; optional OU/account creation is not claimed complete.
 
-**Refreshing an existing guest:** close the console, replace the host's `C:\ISO` with the complete matching rollout and retain `ALFHostConsole-Nodes.json`. Rerun **Host Console step 8** (script 05) for DC/admin and **step 10** (script 11) for nodes. Keep guest state/receipts; same-role v2.0.7 through v2.0.21 execution metadata is retained, but old confirmations are ignored. Deliver `ALFGuestStatus.ps1` and `ALFGuestDisplay.ps1` with the console/runner and role scripts. Node delivery now verifies seven required files. Never copy another node's configure script or rerun destructive guest setup merely to refresh the UI.
+**Refreshing an existing guest:** close the console, replace the host's `C:\ISO` with the complete matching rollout and retain `ALFHostConsole-Nodes.json`. Rerun **Host Console step 8** (script 05) for DC/admin and **step 10** (script 11) for nodes. Keep guest state/receipts; same-role v2.0.7 through v2.0.22 execution metadata is retained, but old confirmations are ignored. Deliver `ALFGuestStatus.ps1` and `ALFGuestDisplay.ps1` with the console/runner and role scripts. Node delivery now verifies seven required files. Never copy another node's configure script or rerun destructive guest setup merely to refresh the UI.
 
 **Node registration details:** below the Arc card, copyable read-only panels show the actual machine, tenant ID, subscription ID, resource group, region and target solution version from the delivered `14.Node-ArcRegister.ps1`. A blank target version means selection when the script runs. Beside them, `w32tm /query /status` shows the current time source, last successful synchronization, stratum and other Windows Time status, whether NTP or domain hierarchy is in use. Both refresh with status; inspection/query failures are visible. No sign-in, registration, resynchronization or time-policy changes run from these panels.
 
-**Just-in-time node target version:** enter a four-part solution version, such as `12.2602.1002.10`, in **Next run**, then select **Apply**. It is saved only in this node's `ALFGuestConsole-Node-State.json`, survives restart, and is passed to script 14 only when you choose **Run** for Arc. The planning values, host settings and delivered script's default are not edited. Apply blank to use that script default again (including its version-selection prompt if unpinned). Unapplied edits block Arc Run; editing is disabled during a running step. Applying a target never starts an update or claims that the requested version is installed; Done still describes detected Arc registration. State writes preserve execution metadata and are replaced atomically.
+**Just-in-time node target version:** enter a four-part Azure Local solution version in **Target version (next Arc run)**, then select **Apply**. The format is `Major.YYMM.Build.Revision`: for `12.2610.1004.50`, `12` is the major line (OS 26100 / 24H2), `2610` is the October 2026 release train, `1004` is Microsoft's build family and `50` is the revision (re-releases get a higher number). Other published examples are `12.2604.1003.1006` and `12.2602.1002.501`. For a release newer than the examples, copy the full version from the Microsoft Learn page *Azure Local release information*; do not guess the build or revision. The format help is shown under the box and in its tooltip. It is saved only in this node's `ALFGuestConsole-Node-State.json`, survives restart, and is passed to script 14 only when you choose **Run** for Arc. The planning values, host settings and delivered script's default are not edited. Apply blank to use that script default again (including its version-selection prompt if unpinned). Unapplied edits block Arc Run; editing is disabled during a running step. Applying a target never starts an update or claims that the requested version is installed; Done still describes detected Arc registration. State writes preserve execution metadata and are replaced atomically.
 
 **DC and admin desktop shortcuts:** host script `05.Host-CopyScriptsToVM.ps1` creates `ALF DC Console.lnk` inside ContosoDC1 and `ALF Admin Console.lnk` inside the planned admin VM (normally ContosoADM1), both on `C:\Users\Public\Desktop`. They point directly to `C:\ISO\Launch-ALFDCConsole.cmd` and `C:\ISO\Launch-ALFAdminConsole.cmd`, respectively. Local and domain accounts share these shortcuts; existing elevation/administrator credential prompts remain unchanged. Rerunning host step 05 refreshes both public shortcuts without running guest configuration or deleting personal shortcuts. If delivery fails, a warning is shown and the matching launcher remains accessible in `C:\ISO`.
 
@@ -276,4 +276,4 @@ without typing it. Leave it empty and script 12 asks for it on each node instead
 
 ## Version
 
-**2.0.22** - see `CHANGELOG.md`. The version is shown at the top of the Lab Builder window, in `VERSION.txt`, in the zip file name and in the header of every script (`# Version: ALF Lab Builder x.y.z`), so a single file copied in on its own can be identified. **Roll out scripts** warns about any script from a different version. It goes up with every change.
+**2.0.23** - see `CHANGELOG.md`. The version is shown at the top of the Lab Builder window, in `VERSION.txt`, in the zip file name and in the header of every script (`# Version: ALF Lab Builder x.y.z`), so a single file copied in on its own can be identified. **Roll out scripts** warns about any script from a different version. It goes up with every change.

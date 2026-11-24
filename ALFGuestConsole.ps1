@@ -1,8 +1,8 @@
-# Version: ALF Lab Builder 2.0.22
+# Version: ALF Lab Builder 2.0.23
 # Shared DC/admin/node console. Completion is detected from this guest.
 param([Parameter(Mandatory = $true)][ValidateSet('DC', 'Admin', 'Node')][string]$Role)
 
-$ALFVersion = '2.0.22'
+$ALFVersion = '2.0.23'
 $Here = $PSScriptRoot
 try {
     Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase -ErrorAction Stop
@@ -339,11 +339,16 @@ $NodeDetailsXaml = @'
                FontFamily="Consolas" FontSize="13" TextWrapping="Wrap"/>
       <Grid Margin="0,6,0,0">
         <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-        <TextBlock Text="Next run:" FontSize="13" VerticalAlignment="Center" Margin="0,0,6,0"/>
-        <TextBox Name="txtTargetVersion" Grid.Column="1" FontFamily="Consolas" FontSize="13" Height="26" MaxLength="64"
-                 ToolTip="Node-only target version override, such as 12.2602.1002.10. Blank uses the delivered script default."/>
+        <TextBlock Text="Target version (next Arc run):" FontSize="13" VerticalAlignment="Center" Margin="0,0,6,0"/>
+        <TextBox Name="txtTargetVersion" Grid.Column="1" FontFamily="Consolas" FontSize="13" Height="26" MaxLength="64">
+          <TextBox.ToolTip>
+            <TextBlock FontFamily="Consolas" FontSize="13" Text="Azure Local solution version: Major.YYMM.Build.Revision&#x0a;  12   = major line (12 = OS 26100 / 24H2, new deployments)&#x0a;  2610 = release train, YYMM (2610 = October 2026)&#x0a;  1004 = build family; copy it from Microsoft, do not guess&#x0a;  50   = revision; a re-release gets a higher number&#x0a;Examples: 12.2610.1004.50  12.2604.1003.1006  12.2602.1002.501&#x0a;Newer release: copy its full version from Microsoft Learn&#x0a;'Azure Local release information'.&#x0a;Apply saves it on this node only; it is used the next time Arc runs.&#x0a;Blank = script default (normally a list to pick from)."/>
+          </TextBox.ToolTip>
+        </TextBox>
         <Button Name="btnApplyTargetVersion" Grid.Column="2" Content="Apply" Width="65" Height="26" Margin="6,0,0,0"/>
       </Grid>
+      <TextBlock Name="txtTargetVersionHelp" FontSize="12" Foreground="Gray" TextWrapping="Wrap" Margin="0,4,0,0"
+                 Text="Format 12.YYMM.Build.Revision, e.g. 12.2610.1004.50 or 12.2602.1002.501 (2610 = Oct 2026). For a newer release, copy the full version from Microsoft Learn 'Azure Local release information'. Blank = pick from a list."/>
     </StackPanel>
   </Border>
   <Border Grid.Column="1" BorderBrush="#DDDDDD" BorderThickness="1" Background="White" CornerRadius="4" Padding="10" Margin="6,0,0,0">

@@ -1,4 +1,4 @@
-﻿# Version: ALF Lab Builder 2.0.22
+﻿# Version: ALF Lab Builder 2.0.23
 # Shared host-only node selection; never edits the Planning Console plan.
 
 function Test-ALFNodeNames([string[]]$Names) {

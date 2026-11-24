@@ -67,8 +67,13 @@ Assert ($source.Contains('if ($Role -eq ''Node'') { $ui.btnDisplay.Visibility'))
 
 $detailsText = ($tokens | Where-Object { $_.Kind -eq 'HereStringLiteral' -and $_.Value.StartsWith('<Grid ') } | Select-Object -First 1).Value
 $details = [Windows.Markup.XamlReader]::Parse($detailsText)
-$ui = @{ txtArcValues=$details.FindName('txtArcValues'); txtTimeStatus=$details.FindName('txtTimeStatus') }
+$ui = @{ txtArcValues=$details.FindName('txtArcValues'); txtTimeStatus=$details.FindName('txtTimeStatus'); txtTargetVersionHelp=$details.FindName('txtTargetVersionHelp') }
 Assert ($ui.txtArcValues.IsReadOnly -and $ui.txtTimeStatus.IsReadOnly) 'Arc values and time status are selectable but cannot edit the plan or time settings.'
+$targetBox = $details.FindName('txtTargetVersion')
+Assert ($targetBox.Parent.Children[0].Text -match '^Target version \(next Arc run\)') 'Name the node override as the target version for the next Arc run.'
+foreach ($help in $ui.txtTargetVersionHelp.Text, $targetBox.ToolTip.Text) {
+    Assert ($help -match '12\.YYMM|Major\.YYMM' -and $help -match '\b12\.2610\.1004\.50\b' -and $help -match 'Azure Local release information') 'Show the version naming convention with a real example and where to copy a newer release.'
+}
 $refresh = $ast.FindAll({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Refresh-GuestNodeDetails' }, $true)[0]
 . ([scriptblock]::Create($refresh.Extent.Text))
 $script:DetailLogs = [Collections.Generic.List[string]]::new()
@@ -93,7 +98,7 @@ foreach ($width in 960, 1236) {
     $details.Measure([Windows.Size]::new($width, [double]::PositiveInfinity))
     $details.Arrange([Windows.Rect]::new(0, 0, $width, $details.DesiredSize.Height))
     $details.UpdateLayout()
-    Assert ($details.DesiredSize.Height -le 210) 'Side-by-side registration and time details fit the space below compact Node cards.'
+    Assert ($details.DesiredSize.Height -le 250) 'Side-by-side registration and time details fit the space below compact Node cards.'
     foreach ($box in $ui.Values) {
         $bounds = $box.TransformToAncestor($details).TransformBounds([Windows.Rect]::new($box.RenderSize))
         Assert ($bounds.Left -ge 0 -and $bounds.Right -le $width -and $bounds.Width -gt 0) 'Copyable values and time output remain inside the available width.'
@@ -112,7 +117,7 @@ foreach ($name in 'Save-GuestState','Update-GuestTargetVersionEditor','Apply-Gue
     . ([scriptblock]::Create($definition.Extent.Text))
 }
 function Refresh-GuestStatus {}
-$Role = 'Node'; $ALFVersion = '2.0.22'
+$Role = 'Node'; $ALFVersion = '2.0.23'
 $StateFile = Join-Path ([IO.Path]::GetTempPath()) ('ALF-TargetState-' + [guid]::NewGuid().ToString('N') + '.json')
 $script:Records = @{ Arc=@{Started='start';ResultPath='receipt'} }
 try {
