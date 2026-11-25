@@ -1,4 +1,4 @@
-# Version: ALF Lab Builder 2.0.23
+# Version: ALF Lab Builder 2.1.0
 # Read-only guest checks. Configuration scripts are inspected, never executed.
 
 $ALFExpectedClusterName = '{{ClusterName}}'

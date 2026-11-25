@@ -1,4 +1,4 @@
-﻿# Version: ALF Lab Builder 2.0.23
+﻿# Version: ALF Lab Builder 2.1.0
 # Shared host-only node selection and Azure Local image helpers; never edits the Planning Console plan.
 
 #The Azure Local image release is the YYMM number from the Planning Console (2608 = the August 2026 release).

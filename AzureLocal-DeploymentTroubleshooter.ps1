@@ -1,5 +1,5 @@
 ﻿#requires -Version 5.1
-# Version: ALF Lab Builder 2.0.23
+# Version: ALF Lab Builder 2.1.0
 # Delivered to each node by step 10 and opened from the Node Console. Read-only.
 <#
 .SYNOPSIS

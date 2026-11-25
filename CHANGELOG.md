@@ -3,6 +3,13 @@
 The version goes up with every change. It's shown at the top of the Lab Builder window,
 in `VERSION.txt` and in the zip file name (`ALF-LabBuilder-v<version>.zip`).
 
+## 2.1.0
+- Planning Console: new **Azure Local image release** row (2601 to 2611, default 2608). Scripts 01 and 10 and the Host Console download `https://aka.ms/hcireleaseimage/<release>` to `C:\ISO\AzureLocal-<release>.iso`, and reuse an ISO already in `C:\ISO` for the same release. A release that is not published yet (such as 2611) fails the download visibly instead of being used.
+- Planning Console: new optional **Target solution version** row, passed to Arc registration (script 14) so a lab can roll forward without a different ISO. Blank keeps the pick list on each node; the Node Console **Target version (next Arc run)** box still overrides it per node. Plans from 2.0.23 and older gain both rows after the cluster name.
+- Nodes: Host Console step 10 delivers `AzureLocal-DeploymentTroubleshooter.ps1` (eight verified files), and the Node Console has a **Deployment troubleshooter** button that opens it in its own window. The troubleshooter has a version stamp, ASCII-only text, and a window that fits a 1024 x 768 node display.
+- Admin station: the ALF Admin Console has an optional **Windows Admin Center and Azure CLI** panel with **WAC 2611: what's new**, **Download Windows Admin Center** (`https://aka.ms/DownloadWAC`) and **Install Azure CLI (winget)**. If winget is missing, the Azure CLI MSI link is shown instead; if a link cannot open, it is shown for copying. 08adm points to the panel when it finishes. The admin setup status is unchanged.
+- Bundled cluster identifier 2100; retain same-role v2.0.23 progress and node overrides.
+
 ## 2.0.23
 - Rename the Node Console **Next run** box to **Target version (next Arc run)**. Behavior is unchanged: Apply saves the override only on that node, and it is used the next time Arc runs.
 - Show the Azure Local version format under the box (`12.YYMM.Build.Revision`, e.g. `12.2610.1004.50`, `12.2602.1002.501`) and a part-by-part tooltip, with a pointer to the Microsoft Learn page *Azure Local release information* for releases newer than the examples. The details panel stays visible without scrolling at 1024 x 768.

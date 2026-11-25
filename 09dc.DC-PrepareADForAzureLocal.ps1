@@ -1,5 +1,5 @@
 ﻿##############################################################
-# Version: ALF Lab Builder 2.0.23   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.1.0   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # 09dc.DC-PrepareADForAzureLocal.ps1
 # Installs the Azure Local Active Directory preparation module, then (optionally)
 # creates the Azure Local OU and the deployment (LCM) user

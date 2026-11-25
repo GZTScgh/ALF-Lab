@@ -1,5 +1,5 @@
 ﻿##############################################################
-# Version: ALF Lab Builder 2.0.23   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.1.0   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # 11.Host-PrepareNodes.ps1
 # Prepares every node from the host, after the Azure Local OS is installed on them:
 #   A. Renames the NICs inside each node to match Hyper-V (1-MGMTCOMP1, 2-MGMTCOMP2, ...)

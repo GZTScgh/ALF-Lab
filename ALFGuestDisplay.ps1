@@ -1,4 +1,4 @@
-# Version: ALF Lab Builder 2.0.23
+# Version: ALF Lab Builder 2.1.0
 # Display changes are optional and apply only to the current desktop session.
 
 $ALFDisplayNativeSource = @'

@@ -1,8 +1,8 @@
-# Version: ALF Lab Builder 2.0.23
+# Version: ALF Lab Builder 2.1.0
 # Shared DC/admin/node console. Completion is detected from this guest.
 param([Parameter(Mandatory = $true)][ValidateSet('DC', 'Admin', 'Node')][string]$Role)
 
-$ALFVersion = '2.0.23'
+$ALFVersion = '2.1.0'
 $Here = $PSScriptRoot
 try {
     Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase -ErrorAction Stop
@@ -108,6 +108,31 @@ function Start-GuestTroubleshooter {
         Write-GuestLog 'Opened the deployment troubleshooter in its own window. Its checks are read-only and run on this node only.'
     }
     catch { Write-GuestLog "Could not open the deployment troubleshooter: $($_.Exception.Message)" }
+}
+$AdminLinks = [ordered]@{
+    WacWhatsNew = 'https://techcommunity.microsoft.com/blog/windows-admin-center-blog/virtualization-mode-in-windows-admin-center-is-now-generally-available/4573651'
+    WacDownload = 'https://aka.ms/DownloadWAC'
+    AzureCliMsi = 'https://aka.ms/installazurecliwindowsx64'
+}
+$AzureCliWinget = 'winget install -e --id Microsoft.AzureCLI --source winget --accept-source-agreements --accept-package-agreements'
+function Open-GuestLink([string]$Name, [string]$Url) {
+    try {
+        Start-Process $Url -ErrorAction Stop
+        Write-GuestLog "Opened $Name in the browser: $Url"
+    }
+    catch { Write-GuestLog "Could not open $Name ($($_.Exception.Message)). Copy this link into a browser: $Url" }
+}
+function Start-GuestAzureCliInstall {
+    if (-not (Get-Command winget.exe -ErrorAction SilentlyContinue)) {
+        Write-GuestLog "winget was not found for this user. Sign out and back in so App Installer finishes registering, then try again, or download the Azure CLI installer: $($AdminLinks.AzureCliMsi)"
+        return
+    }
+    $command = "$AzureCliWinget; Write-Host ''; Write-Host 'When winget finishes, open a NEW PowerShell window and run: az version' -ForegroundColor Green"
+    try {
+        Start-Process powershell.exe -ArgumentList "-NoProfile -NoExit -Command `"$command`"" -WorkingDirectory $Here -ErrorAction Stop
+        Write-GuestLog "Started the Azure CLI install in its own window: $AzureCliWinget"
+    }
+    catch { Write-GuestLog "Could not start the Azure CLI install: $($_.Exception.Message). Run this in PowerShell instead: $AzureCliWinget" }
 }
 function Set-GuestConsoleDisplay([bool]$ShowWarning = $false) {
     try {
@@ -375,6 +400,26 @@ $NodeDetailsXaml = @'
   </Border>
 </Grid>
 '@
+$AdminToolsXaml = @'
+<Border xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        BorderBrush="#DDDDDD" BorderThickness="1" Background="White" CornerRadius="4" Padding="10" Margin="0,2,0,6">
+  <StackPanel>
+    <TextBlock Text="Windows Admin Center and Azure CLI (optional)" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" Foreground="#0B5394"/>
+    <TextBlock TextWrapping="Wrap" Foreground="#444444" Margin="0,2,0,6"
+               Text="Windows Admin Center 2611 adds virtualization mode (vMode) for managing Hyper-V hosts and VMs. Read what's new, download the installer, or install the Azure CLI with winget. These extras do not change the setup step status."/>
+    <WrapPanel>
+      <Button Name="btnWacWhatsNew" Content="WAC 2611: what's new" Width="190" Height="30" Margin="0,0,8,6"
+              ToolTip="Open the Windows Admin Center 2611 announcement (virtualization mode is now generally available) in the browser."/>
+      <Button Name="btnWacDownload" Content="Download Windows Admin Center" Width="250" Height="30" Margin="0,0,8,6"
+              ToolTip="Open https://aka.ms/DownloadWAC in the browser to download the latest Windows Admin Center installer."/>
+      <Button Name="btnAzureCli" Content="Install Azure CLI (winget)" Width="220" Height="30" Margin="0,0,8,6"
+              ToolTip="Install the Azure CLI with winget in its own PowerShell window. Needs internet access."/>
+    </WrapPanel>
+    <TextBox Name="txtAdminLinks" IsReadOnly="True" BorderThickness="0" Background="Transparent" Padding="0"
+             FontFamily="Consolas" FontSize="13" TextWrapping="Wrap" Foreground="Gray"/>
+  </StackPanel>
+</Border>
+'@
 $Brush = New-Object Windows.Media.BrushConverter
 $Colors = @{
     Done=$Brush.ConvertFromString('#107C10'); NotDone=$Brush.ConvertFromString('#605E5C')
@@ -415,6 +460,15 @@ if ($Role -eq 'Node') {
     $ui.txtTargetVersion.Add_TextChanged({ Update-GuestTargetVersionEditor })
     $ui.btnApplyTargetVersion.Add_Click({ Apply-GuestTargetVersion })
     $ui.panelTasks.Children.Add($details) | Out-Null
+}
+if ($Role -eq 'Admin') {
+    $adminTools = [Windows.Markup.XamlReader]::Parse($AdminToolsXaml)
+    foreach ($name in 'btnWacWhatsNew','btnWacDownload','btnAzureCli','txtAdminLinks') { $ui[$name] = $adminTools.FindName($name) }
+    $ui.txtAdminLinks.Text = "WAC 2611 what's new: $($AdminLinks.WacWhatsNew)`r`nWAC download:         $($AdminLinks.WacDownload)`r`nAzure CLI:            $AzureCliWinget"
+    $ui.btnWacWhatsNew.Add_Click({ Open-GuestLink "the Windows Admin Center 2611 announcement" $AdminLinks.WacWhatsNew })
+    $ui.btnWacDownload.Add_Click({ Open-GuestLink 'the Windows Admin Center download' $AdminLinks.WacDownload })
+    $ui.btnAzureCli.Add_Click({ Start-GuestAzureCliInstall })
+    $ui.panelTasks.Children.Add($adminTools) | Out-Null
 }
 $ui.btnRefresh.Add_Click({ Refresh-GuestStatus })
 $ui.btnFolder.Add_Click({ Start-Process explorer.exe -ArgumentList "`"$Here`"" })

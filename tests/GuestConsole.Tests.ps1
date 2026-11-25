@@ -117,7 +117,7 @@ foreach ($name in 'Save-GuestState','Update-GuestTargetVersionEditor','Apply-Gue
     . ([scriptblock]::Create($definition.Extent.Text))
 }
 function Refresh-GuestStatus {}
-$Role = 'Node'; $ALFVersion = '2.0.23'
+$Role = 'Node'; $ALFVersion = '2.1.0'
 $StateFile = Join-Path ([IO.Path]::GetTempPath()) ('ALF-TargetState-' + [guid]::NewGuid().ToString('N') + '.json')
 $script:Records = @{ Arc=@{Started='start';ResultPath='receipt'} }
 try {
@@ -181,6 +181,61 @@ finally {
     Microsoft.PowerShell.Management\Remove-Item -LiteralPath $ResultPath -Force
     foreach ($name in '14.Node-ArcRegister.ps1','12.Node-Configure.ps1') { Microsoft.PowerShell.Management\Remove-Item -LiteralPath "function:$name" }
 }
+
+foreach ($name in 'AdminToolsXaml','AdminLinks','AzureCliWinget') {
+    $assign = $ast.FindAll({ param($n) $n -is [Management.Automation.Language.AssignmentStatementAst] -and $n.Left.Extent.Text -eq "`$$name" }, $true)[0]
+    Set-Variable -Name $name -Value (& ([scriptblock]::Create($assign.Right.Extent.Text)))
+}
+Assert ($AdminLinks.WacDownload -eq 'https://aka.ms/DownloadWAC' -and $AdminLinks.WacWhatsNew -match '^https://techcommunity\.microsoft\.com/blog/windows-admin-center-blog/.+/4573651$') 'Admin links open the WAC download and the WAC 2611 virtualization mode announcement.'
+Assert ($AzureCliWinget -match '^winget install -e --id Microsoft\.AzureCLI ' -and $AzureCliWinget -match '--accept-source-agreements' -and $AzureCliWinget -match '--accept-package-agreements') 'Azure CLI installs by exact winget id without interactive agreement prompts.'
+$adminIf = @($ast.FindAll({ param($n) $n -is [Management.Automation.Language.IfStatementAst] -and $n.Clauses[0].Item1.Extent.Text -eq "`$Role -eq 'Admin'" }, $true))
+Assert ($adminIf.Count -eq 1 -and $adminIf[0].Clauses[0].Item2.Extent.Text.Contains('$ui.panelTasks.Children.Add($adminTools)') -and ([regex]::Matches($source, [regex]::Escape('Parse($AdminToolsXaml)'))).Count -eq 1 -and @(Get-GuestTasks Admin).Count -eq 1) 'Only the Admin console adds the optional WAC/Azure CLI panel, without adding a setup step.'
+$adminTools = [Windows.Markup.XamlReader]::Parse($AdminToolsXaml)
+$adminUi = @{}
+foreach ($name in 'btnWacWhatsNew','btnWacDownload','btnAzureCli','txtAdminLinks') { $adminUi[$name] = $adminTools.FindName($name) }
+Assert ($adminUi.btnWacWhatsNew.Content -match '2611' -and $adminUi.btnWacDownload.Content -eq 'Download Windows Admin Center' -and $adminUi.btnAzureCli.Content -match 'Azure CLI \(winget\)' -and $adminUi.txtAdminLinks.IsReadOnly) 'Admin panel offers both WAC links, the Azure CLI install and read-only copyable link text.'
+$adminUi.txtAdminLinks.Text = "WAC 2611 what's new: $($AdminLinks.WacWhatsNew)`r`nWAC download:         $($AdminLinks.WacDownload)`r`nAzure CLI:            $AzureCliWinget"
+$adminTools.SetValue([Windows.Documents.TextElement]::FontFamilyProperty, [Windows.Media.FontFamily]::new('Segoe UI'))
+$adminTools.SetValue([Windows.Documents.TextElement]::FontSizeProperty, [double]15)
+foreach ($width in 960, 1236) {
+    $adminTools.Measure([Windows.Size]::new($width, [double]::PositiveInfinity))
+    $adminTools.Arrange([Windows.Rect]::new(0, 0, $width, $adminTools.DesiredSize.Height))
+    $adminTools.UpdateLayout()
+    Assert ($adminTools.DesiredSize.Height -le 260) 'The Admin tools panel fits below the single Admin card.'
+    foreach ($control in $adminUi.Values) {
+        $bounds = $control.TransformToAncestor($adminTools).TransformBounds([Windows.Rect]::new($control.RenderSize))
+        Assert ($bounds.Left -ge 0 -and $bounds.Right -le $width -and $bounds.Width -gt 0) 'Admin tool buttons and link text stay inside the available width.'
+    }
+}
+foreach ($name in 'Open-GuestLink','Start-GuestAzureCliInstall') {
+    $definition = $ast.FindAll({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name }, $true)[0]
+    . ([scriptblock]::Create($definition.Extent.Text))
+}
+$Here = 'C:\ISO'
+function Start-Process {
+    param($FilePath, $ArgumentList, $WorkingDirectory, $ErrorAction)
+    if ($script:FailStart) { throw 'Mock start failed' }
+    $script:Started = @{ FilePath=$FilePath; ArgumentList=$ArgumentList; WorkingDirectory=$WorkingDirectory }
+}
+function Get-Command { param($Name, $ErrorAction) if ($script:HasWinget) { [pscustomobject]@{ Name=$Name } } }
+try {
+    $script:FailStart = $false; $script:Started = $null
+    Open-GuestLink 'the Windows Admin Center download' $AdminLinks.WacDownload
+    Assert ($script:Started.FilePath -eq 'https://aka.ms/DownloadWAC' -and @($script:DetailLogs)[-1].Contains('https://aka.ms/DownloadWAC')) 'The WAC download link opens in the default browser and is logged.'
+    $script:FailStart = $true
+    Open-GuestLink 'the Windows Admin Center 2611 announcement' $AdminLinks.WacWhatsNew
+    Assert (@($script:DetailLogs)[-1] -match 'Copy this link' -and @($script:DetailLogs)[-1].Contains($AdminLinks.WacWhatsNew)) 'A browser failure leaves the full link in the log to copy.'
+    $script:FailStart = $false; $script:Started = $null; $script:HasWinget = $false
+    Start-GuestAzureCliInstall
+    Assert ($null -eq $script:Started -and @($script:DetailLogs)[-1] -match 'winget was not found' -and @($script:DetailLogs)[-1].Contains($AdminLinks.AzureCliMsi)) 'Missing winget explains the fix and offers the Azure CLI installer link instead of starting anything.'
+    $script:HasWinget = $true
+    Start-GuestAzureCliInstall
+    Assert ($script:Started.FilePath -eq 'powershell.exe' -and $script:Started.ArgumentList -match '-NoExit' -and $script:Started.ArgumentList.Contains($AzureCliWinget) -and @($script:DetailLogs)[-1].Contains($AzureCliWinget)) 'Azure CLI installs with winget in its own visible PowerShell window.'
+    $script:FailStart = $true
+    Start-GuestAzureCliInstall
+    Assert (@($script:DetailLogs)[-1] -match 'Could not start' -and @($script:DetailLogs)[-1].Contains($AzureCliWinget)) 'A failed launch shows the winget command to run manually.'
+}
+finally { foreach ($name in 'Start-Process','Get-Command') { Microsoft.PowerShell.Management\Remove-Item -LiteralPath "function:$name" } }
 
 $deliveryAst = [Management.Automation.Language.Parser]::ParseFile((Join-Path $root '05.Host-CopyScriptsToVM.ps1'), [ref]$tokens, [ref]$errors)
 $fn = $deliveryAst.FindAll({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Copy-ALFGuestConsoleShortcut' }, $true)[0]
