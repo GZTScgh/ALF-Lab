@@ -49,6 +49,18 @@ Assert ($threeNodes.GuestMemoryGB -eq 198 -and $threeNodes.GuestVcpus -eq 76 -an
 $defaultTooMany = ''
 try { Test-ALFLabSizing $values -NodeCount 3 | Out-Null } catch { $defaultTooMany = $_.Exception.Message }
 Assert ($defaultTooMany -match '3 nodes' -and $defaultTooMany -match 'fewer nodes') 'The default 96-GB host holds only two nodes and says how to fix it.'
+$plannedThree = $values.Clone(); $plannedThree.NodeCount = '3'
+$plannedTooMany = ''
+try { Test-ALFLabSizing $plannedThree | Out-Null } catch { $plannedTooMany = $_.Exception.Message }
+Assert ($plannedTooMany -match '3 nodes' -and $plannedTooMany -match 'Planning Console') 'The planned Number of Azure Local nodes is budgeted from the plan values.'
+Assert ((Test-ALFLabSizing $plannedThree -NodeCount 2).NodeCount -eq 2) 'The count chosen in Host Console step 9 overrides the plan.'
+$customThree = $custom.Clone(); $customThree.NodeCount = '3'
+Assert ((Test-ALFLabSizing $customThree $sku).GuestMemoryGB -eq 198) 'A larger host can plan three nodes up front.'
+foreach ($text in '1', '17', 'x', '02') {
+    $bad = $custom.Clone(); $bad.NodeCount = $text; $field = ''
+    try { Test-ALFLabSizing $bad | Out-Null } catch { $field = $_.Exception.Data['Field'] }
+    Assert ($field -eq 'NodeCount') "A planned node count of '$text' must be rejected on its own field."
+}
 Assert-Throws { Test-ALFLabSizing $custom -NodeCount 16 } 'Sixteen 64-GB nodes do not fit a 256-GB host.'
 foreach ($count in 1, 17) {
     Assert-Throws { Test-ALFLabSizing $custom -NodeCount $count } 'The lab supports 2 to 16 nodes.'
@@ -69,6 +81,19 @@ Assert (($plan.Values | Where-Object Key -eq 'NodeVcpus').Value -eq '12' -and ($
 ($plan.Values | Where-Object Key -eq 'DCMemoryGB').Value = '8'
 Initialize-ALFGuestSizingPlan $plan
 Assert ($plan.Values.Count -eq 10 -and ($plan.Values | Where-Object Key -eq 'DCMemoryGB').Value -eq '8' -and $plan.ClusterIdentifier -eq '3222') 'Repeated migration must not duplicate fields, change selected sizes or retarget names.'
+Initialize-ALFNodeCountPlan $plan
+$keys = @($plan.Values | ForEach-Object Key)
+$countRow = $plan.Values | Where-Object Key -eq 'NodeCount'
+Assert ($keys[$keys.IndexOf('NodeCount') + 1] -eq 'NodeVcpus' -and $countRow.Value -eq '2' -and $countRow.Group -eq '2. Host') 'Older plans gain a 2-node count in the host section, just before the node sizing rows.'
+$countRow.Value = '4'
+Initialize-ALFNodeCountPlan $plan
+Assert ($plan.Values.Count -eq 11 -and ($plan.Values | Where-Object Key -eq 'NodeCount').Value -eq '4') 'Repeated migration keeps the chosen node count.'
+$exampleRows = @((Get-Content -LiteralPath (Join-Path (Split-Path $PSScriptRoot -Parent) 'LabValues.example.json') -Raw | ConvertFrom-Json).Values)
+$exampleKeys = @($exampleRows | ForEach-Object Key)
+$exampleCount = $exampleRows | Where-Object Key -eq 'NodeCount'
+$migratedCount = Get-ALFNodeCountRow $exampleCount.Group
+$sameFields = @('Label', 'Value', 'Example', 'Pattern', 'Description', 'Hint', 'UsedIn' | Where-Object { $exampleCount.$_ -cne $migratedCount.$_ }).Count -eq 0
+Assert ($sameFields -and $exampleKeys[$exampleKeys.IndexOf('NodeCount') + 1] -eq 'NodeVcpus') 'New plans and migrated plans get the same node-count row before the node sizing rows.'
 
 $script:HostInfo = [pscustomobject]@{NumberOfLogicalProcessors=20;TotalPhysicalMemory=([long](95.9 * 1GB))}
 function Get-CimInstance { param($ClassName, $ErrorAction) return $script:HostInfo }
@@ -96,6 +121,12 @@ $ui = @{txtSizingSummary=[Windows.Controls.TextBlock]::new()}
 $script:HostSkus = @(); $script:HostSkuContext = ''
 Assert (Update-LabSizingStatus) 'Planning accepts the default budget even without Azure refresh.'
 Assert ($ui.txtSizingSummary.Text -match '78 / 80' -and $ui.txtSizingSummary.Text -match '28 guest vCPUs / 20') 'Show RAM headroom and shared CPU allocations together.'
+$items += [pscustomobject]@{Key='NodeCount';Value='3';Status='';Hint=''}
+Assert (-not (Update-LabSizingStatus) -and $ui.txtSizingSummary.Text -match '3 nodes' -and ($items | Where-Object Key -eq 'HostMemoryReserveGB').Status -eq 'Invalid sizing') 'Planning three nodes on the default SuperHost is flagged before rollout.'
+($items | Where-Object Key -eq 'NodeCount').Value = '17'
+Assert (-not (Update-LabSizingStatus) -and ($items | Where-Object Key -eq 'NodeCount').Status -eq 'Invalid sizing') 'An out-of-range node count marks its own row.'
+($items | Where-Object Key -eq 'NodeCount').Value = '2'
+Assert ((Update-LabSizingStatus) -and $ui.txtSizingSummary.Text -match '^2 nodes: 78 / 80' -and ($items | Where-Object Key -eq 'NodeCount').Status -eq 'OK') 'The summary names the planned node count.'
 ($items | Where-Object Key -eq 'NodeMemoryGB').Value = '72'
 Assert (-not (Update-LabSizingStatus)) 'Planning reports insufficient RAM before command copying or rollout.'
 Assert ($ui.txtSizingSummary.Text -match '^INVALID LAB SIZING:') 'Expose the actionable allocation failure in the live summary.'

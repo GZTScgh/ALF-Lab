@@ -117,7 +117,7 @@ foreach ($name in 'Save-GuestState','Update-GuestTargetVersionEditor','Apply-Gue
     . ([scriptblock]::Create($definition.Extent.Text))
 }
 function Refresh-GuestStatus {}
-$Role = 'Node'; $ALFVersion = '2.1.0'
+$Role = 'Node'; $ALFVersion = '2.1.1'
 $StateFile = Join-Path ([IO.Path]::GetTempPath()) ('ALF-TargetState-' + [guid]::NewGuid().ToString('N') + '.json')
 $script:Records = @{ Arc=@{Started='start';ResultPath='receipt'} }
 try {

@@ -1,8 +1,8 @@
-# Version: ALF Lab Builder 2.1.0
+# Version: ALF Lab Builder 2.1.1
 # Shared DC/admin/node console. Completion is detected from this guest.
 param([Parameter(Mandatory = $true)][ValidateSet('DC', 'Admin', 'Node')][string]$Role)
 
-$ALFVersion = '2.1.0'
+$ALFVersion = '2.1.1'
 $Here = $PSScriptRoot
 try {
     Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase -ErrorAction Stop

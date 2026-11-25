@@ -1,5 +1,5 @@
 ﻿##############################################################
-# Version: ALF Lab Builder 2.1.0   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.1.1   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # ALFHostConsole.ps1   -   2. ALF Lab Builder - Host Console
 # The Host Console: a window on the lab host (the Azure VM) that runs the host-side lab
 # steps for you, shows which ones are done, and downloads the two install images with
@@ -24,14 +24,14 @@
 #        It resumes after network drops and keeps going in the background.
 ##############################################################
 
-$ALFVersion = "2.1.0"
+$ALFVersion = "2.1.1"
 
 #Lab VM names - filled in by the Planning Console's "Roll out scripts"
 $DCName            = "ContosoDC1"
 $AdminStationName  = "{{AdminStationName}}"
-$NodeNames         = @("{{NodeName1}}", "{{NodeName2}}")
-$PlannedNodeNames  = @($NodeNames)
 . (Join-Path $PSScriptRoot 'ALFNodeSettings.ps1')
+#Planned nodes: NodeName1/NodeName2 plus suggested names up to the planned Number of Azure Local nodes
+$PlannedNodeNames  = @(Get-ALFPlannedNodeNames @("{{NodeName1}}", "{{NodeName2}}") "{{NodeCount}}")
 $NodeSettingsFile  = Join-Path $PSScriptRoot 'ALFHostConsole-Nodes.json'
 $NodeNames         = @(Get-ALFNodeNames $NodeSettingsFile $PlannedNodeNames)
 #Planned node IP range - node 1 gets the first address, node 2 the next (step 10 assigns them)

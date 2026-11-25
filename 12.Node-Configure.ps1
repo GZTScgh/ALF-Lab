@@ -1,5 +1,5 @@
 ﻿######################  12.Node-Configure.ps1  ######################
-# Version: ALF Lab Builder 2.1.0   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.1.1   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # CUSTOMISE EACH NODE - name, IP, DNS, time, Remote Desktop
 #
 # THIS FILE IS A TEMPLATE. Don't edit or run it on the host.

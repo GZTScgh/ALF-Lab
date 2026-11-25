@@ -49,6 +49,14 @@ try {
     $longNext = Get-ALFNextNodeName @('ABCDEFGHIJKLMN9')
     Assert ($longNext.Length -le 15 -and $longNext -eq 'ABCDEFGHIJKLM10') 'Next name stays within 15 characters.'
     Assert ((Join-ALFNodeNames @('A', 'B')) -eq 'A and B' -and (Join-ALFNodeNames @('A', 'B', 'C')) -eq 'A, B and C') 'Node lists read naturally.'
+    $plannedThree = @(Get-ALFPlannedNodeNames $planned '3')
+    Assert ($plannedThree.Count -eq 3 -and $plannedThree[2] -eq 'AzL2001Node3' -and (@(Get-ALFPlannedNodeNames $planned '2') -join '|') -eq ($planned -join '|')) 'The planned node count adds suggested names after NodeName2.'
+    $plannedSixteen = @(Get-ALFPlannedNodeNames $planned '16')
+    Assert ($plannedSixteen.Count -eq 16 -and $plannedSixteen[15] -eq 'AzL2001Node16') 'Sixteen planned nodes get valid names.'
+    foreach ($badCount in '1', '17', 'x', '') {
+        Assert-Throws { Get-ALFPlannedNodeNames $planned $badCount } "A planned node count of '$badCount' must be rejected."
+    }
+    Assert ((@(Get-ALFPlannedNodeNames @('{{NodeName1}}', '{{NodeName2}}') '{{NodeCount}}') -join '|') -eq '{{NodeName1}}|{{NodeName2}}') 'Unrolled templates keep their placeholders.'
     Save-ALFNodeNames $NodeSettingsFile $planned
     Assert ((@(Get-ALFNodeNames $NodeSettingsFile $selected) -join '|') -eq ($planned -join '|')) 'Replacing settings must persist the new selection.'
     Set-Content -LiteralPath $NodeSettingsFile -Value '{broken'
@@ -124,7 +132,23 @@ try {
     # Fill the templates from the starter plan (Rollout\ is local-only), then run only their node-name/IP setup assignments.
     $planValues = @{}
     (Get-Content -LiteralPath (Join-Path $root 'LabValues.example.json') -Raw | ConvertFrom-Json).Values |
-        Where-Object Key -in 'NodeName1', 'NodeName2', 'NodeIPStart', 'NodeIPEnd' | ForEach-Object { $planValues[$_.Key] = [string]$_.Value }
+        Where-Object Key -in 'NodeName1', 'NodeName2', 'NodeIPStart', 'NodeIPEnd', 'NodeCount' | ForEach-Object { $planValues[$_.Key] = [string]$_.Value }
+    Assert ($planValues.NodeCount -eq '2') 'The starter plan budgets two nodes.'
+    # With a planned count of 3 and no saved step 9 selection, every entry point starts with three nodes.
+    $threePlan = $planValues.Clone(); $threePlan.NodeCount = '3'
+    $noSelection = Join-Path $fixtureRoot 'no-selection'
+    $plannedSetup = @{ 'ALFHostConsole.ps1' = '$PlannedNodeNames', '$NodeSettingsFile', '$NodeNames'; '10.Host-CreateNodeVMs.ps1' = '$NodeNameList'; '11.Host-PrepareNodes.ps1' = '$NodeNames' }
+    foreach ($file in $plannedSetup.Keys) {
+        $content = Get-Content -LiteralPath (Join-Path $root $file) -Raw
+        foreach ($key in $threePlan.Keys) { $content = $content.Replace('{{' + $key + '}}', $threePlan[$key]) }
+        $fileTokens = $null; $fileErrors = $null
+        $fileAst = [Management.Automation.Language.Parser]::ParseInput($content, [ref]$fileTokens, [ref]$fileErrors)
+        $variables = $plannedSetup[$file]
+        $code = (@($fileAst.EndBlock.Statements | Where-Object { $_ -is [Management.Automation.Language.AssignmentStatementAst] -and $_.Left.Extent.Text -in $variables }) | ForEach-Object { $_.Extent.Text }) -join "`n"
+        $resultVariable = @($variables)[-1].TrimStart('$')
+        $names = & { . ([scriptblock]::Create($code.Replace('$PSScriptRoot', '$noSelection'))); Get-Variable -Name $resultVariable -ValueOnly }
+        Assert (@($names).Count -eq 3 -and @($names)[2] -eq ($planValues.NodeName2 -replace '2$', '3')) "$file must start with the planned Number of Azure Local nodes."
+    }
     foreach ($file in '10.Host-CreateNodeVMs.ps1', '11.Host-PrepareNodes.ps1') {
         $content = Get-Content -LiteralPath (Join-Path $root $file) -Raw
         foreach ($key in $planValues.Keys) { $content = $content.Replace('{{' + $key + '}}', $planValues[$key]) }

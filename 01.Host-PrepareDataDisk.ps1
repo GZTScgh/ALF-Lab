@@ -1,5 +1,5 @@
 ﻿##############################################################
-# Version: ALF Lab Builder 2.1.0   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.1.1   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # 01.Host-PrepareDataDisk.ps1
 # Prepares the lab host:
 #   1. Creates C:\ISO and F:\VMs

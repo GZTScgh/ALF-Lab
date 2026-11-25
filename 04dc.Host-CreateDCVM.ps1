@@ -1,5 +1,5 @@
 ﻿##############################################################
-# Version: ALF Lab Builder 2.1.0   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.1.1   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # 04dc.Host-CreateDCVM.ps1
 # Creates the domain controller VM (ContosoDC1) from the Server 2025 evaluation VHDX
 #

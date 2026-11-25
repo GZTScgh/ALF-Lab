@@ -1,5 +1,5 @@
 ﻿##############################################################
-# Version: ALF Lab Builder 2.1.0   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.1.1   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # ALFLabBuilder.ps1   -   1. ALF Lab Builder - Planning Console
 # A simple window for keeping track of every value the Azure Local lab needs,
 # and "rolling out" the lab scripts with those values filled in.
@@ -23,7 +23,7 @@ param(
     [string]$ValuesFile = (Join-Path $PSScriptRoot "LabValues.json")
 )
 
-$ALFVersion = "2.1.0"   #increment on EVERY change (also LabValues.example.json, VERSION.txt, CHANGELOG.md)
+$ALFVersion = "2.1.1"   #increment on EVERY change (also LabValues.example.json, VERSION.txt, CHANGELOG.md)
 . (Join-Path $PSScriptRoot 'ALFHostSizing.ps1')
 . (Join-Path $PSScriptRoot 'ALFGuestSizing.ps1')
 $script:HostSkus = @()
@@ -203,8 +203,15 @@ public class LabValue : INotifyPropertyChanged {
                     <TextBlock.Style><Style TargetType="TextBlock"><Style.Triggers>
                       <DataTrigger Binding="{Binding Key}" Value="HostVMSize"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
                       <DataTrigger Binding="{Binding Key}" Value="AzureLocalImageRelease"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                      <DataTrigger Binding="{Binding Key}" Value="NodeCount"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
                     </Style.Triggers></Style></TextBlock.Style>
                   </TextBlock>
+                  <ComboBox Name="cmbNodeCount" ItemsSource="{Binding Choices}" Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}" IsEditable="True" IsTextSearchEnabled="True"
+                            ToolTip="Number of Azure Local nodes (2-16). Node RAM and vCPUs are budgeted once per node on the SuperHost.">
+                    <ComboBox.Style><Style TargetType="ComboBox"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers>
+                      <DataTrigger Binding="{Binding Key}" Value="NodeCount"><Setter Property="Visibility" Value="Visible"/></DataTrigger>
+                    </Style.Triggers></Style></ComboBox.Style>
+                  </ComboBox>
                   <ComboBox Name="cmbImageRelease" ItemsSource="{Binding Choices}" Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}" IsEditable="True" IsTextSearchEnabled="True"
                             ToolTip="Azure Local release to download and install the nodes from (YYMM). Pick from the list or type a newer one.">
                     <ComboBox.Style><Style TargetType="ComboBox"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers>
@@ -462,6 +469,7 @@ function Load-Values {
     $script:LabData = Get-Content $ValuesFile -Raw | ConvertFrom-Json
     Initialize-ALFHostSizingPlan $script:LabData
     Initialize-ALFGuestSizingPlan $script:LabData
+    Initialize-ALFNodeCountPlan $script:LabData
     Initialize-ALFDomainPlan $script:LabData
     Initialize-ALFImagePlan $script:LabData
     $identifier = [string]$script:LabData.ClusterIdentifier
@@ -481,6 +489,9 @@ function Load-Values {
         }
         elseif ($o.Key -eq 'AzureLocalImageRelease') {
             foreach ($choice in Get-ALFImageReleaseChoices $o.Value) { $o.Choices.Add($choice) }
+        }
+        elseif ($o.Key -eq 'NodeCount') {
+            foreach ($choice in 2..16) { $o.Choices.Add([string]$choice) }
         }
         $o.IdentifierTemplate = $v.IdentifierTemplate
         if (-not $o.IdentifierTemplate -and $IdentifierTemplates.Contains($o.Key)) {
@@ -532,6 +543,7 @@ function Save-Values {
     $disk = Get-Content $ValuesFile -Raw | ConvertFrom-Json
     Initialize-ALFHostSizingPlan $disk
     Initialize-ALFGuestSizingPlan $disk
+    Initialize-ALFNodeCountPlan $disk
     Initialize-ALFDomainPlan $disk
     Initialize-ALFImagePlan $disk
     foreach ($v in @($disk.Values)) {
@@ -630,12 +642,18 @@ function Update-LabSizingStatus {
             $row.Hint = $field.Detail
         }
     }
+    $countRow = $items | Where-Object Key -eq 'NodeCount' | Select-Object -First 1
+    if ($countRow) {
+        $default = Get-ALFNodeCountRow ''
+        $countRow.Status = if ($countRow.Value -match $default.Pattern) { 'OK' } else { 'Check rule' }
+        $countRow.Hint = $default.Hint
+    }
     $subscription = $map.SubscriptionId
     $sku = if ($script:HostSkuContext -ceq "$subscription|southcentralus") { $script:HostSkus | Where-Object name -ceq $map.HostVMSize | Select-Object -First 1 } else { $null }
     try {
         $budget = Test-ALFLabSizing $map $sku
         $script:LabSizingWarning = $budget.Warning
-        $ui.txtSizingSummary.Text = "$($budget.GuestMemoryGB) / $($budget.AllocatableMemoryGB) GB guest RAM; $($budget.RemainingHostMemoryGB) GB remains for SuperHost ($($budget.HostReserveGB) GB reserved). $($budget.GuestVcpus) guest vCPUs / $($budget.HostVcpus) host vCPUs. $($budget.Warning)"
+        $ui.txtSizingSummary.Text = "$($budget.NodeCount) nodes: $($budget.GuestMemoryGB) / $($budget.AllocatableMemoryGB) GB guest RAM; $($budget.RemainingHostMemoryGB) GB remains for SuperHost ($($budget.HostReserveGB) GB reserved). $($budget.GuestVcpus) guest vCPUs / $($budget.HostVcpus) host vCPUs. $($budget.Warning)"
         $ui.txtSizingSummary.Foreground = [Windows.Media.BrushConverter]::new().ConvertFromString($(if ($budget.Warning) { '#8A6100' } else { '#107C10' }))
         return $true
     }
@@ -802,13 +820,14 @@ function Test-Network([switch]$Quiet) {
         $problems++
     }
 
-    #Ranges: cluster resources, node IPs and DHCP
+    #Ranges: cluster resources, node IPs (one per planned node) and DHCP
+    $byKey = @{}; foreach ($i in $items) { $byKey[$i.Key] = $i }
+    $nodeCount = if ($byKey.NodeCount -and "$($byKey.NodeCount.Value)" -match '^([2-9]|1[0-6])$') { [int]$byKey.NodeCount.Value } else { 2 }
     $ranges = @(
         @{ Name = "cluster resources range"; Start = "InfraPoolStart"; End = "InfraPoolEnd"; Min = 6 }
-        @{ Name = "node IP range";           Start = "NodeIPStart";    End = "NodeIPEnd";    Min = 2 }
+        @{ Name = "node IP range";           Start = "NodeIPStart";    End = "NodeIPEnd";    Min = $nodeCount; Why = " (one per planned node)" }
         @{ Name = "DHCP range";              Start = "DhcpStart";      End = "DhcpEnd";      Min = 1 }
     )
-    $byKey = @{}; foreach ($i in $items) { $byKey[$i.Key] = $i }
     $okRanges = @()
     foreach ($r in $ranges) {
         $s = $byKey[$r.Start]; $e = $byKey[$r.End]
@@ -819,7 +838,7 @@ function Test-Network([switch]$Quiet) {
         }
         $size = $en - $sn + 1
         if ($size -lt $r.Min) {
-            Set-Problem $e "Too small" "The $($r.Name) has $size address(es) - it needs at least $($r.Min)"; $problems++
+            Set-Problem $e "Too small" "The $($r.Name) has $size address(es) - it needs at least $($r.Min)$($r.Why)"; $problems++
         }
         $okRanges += @{ Name = $r.Name; Start = $sn; End = $en; Keys = @($r.Start, $r.End) }
     }
@@ -1001,7 +1020,7 @@ $window.AddHandler([System.Windows.Controls.Primitives.Selector]::SelectionChang
     if ($e.OriginalSource -is [System.Windows.Controls.ComboBox] -and $e.OriginalSource.Name -eq 'cmbHostSize') {
         $window.Dispatcher.BeginInvoke([action]{ Update-HostSizingStatus | Out-Null; Update-LabSizingStatus | Out-Null; Update-Commands; Update-Details }) | Out-Null
     }
-    elseif ($e.OriginalSource -is [System.Windows.Controls.ComboBox] -and $e.OriginalSource.Name -eq 'cmbImageRelease') {
+    elseif ($e.OriginalSource -is [System.Windows.Controls.ComboBox] -and $e.OriginalSource.Name -in 'cmbImageRelease', 'cmbNodeCount') {
         $window.Dispatcher.BeginInvoke([action]{ Test-Values -Quiet | Out-Null; Update-Details }) | Out-Null
     }
 })

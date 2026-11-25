@@ -1,5 +1,5 @@
 ﻿##############################################################
-# Version: ALF Lab Builder 2.1.0   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.1.1   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # 11.Host-PrepareNodes.ps1
 # Prepares every node from the host, after the Azure Local OS is installed on them:
 #   A. Renames the NICs inside each node to match Hyper-V (1-MGMTCOMP1, 2-MGMTCOMP2, ...)
@@ -18,10 +18,10 @@
 #   That's why this works before the nodes have an IP address.
 ##############################################################
 
-#Node names and IP range - set in the Lab Builder.
+#Node names, Number of Azure Local nodes and IP range - set in the Lab Builder.
 #Node 1 gets the first address of the range, node 2 the next, and so on.
-$NodeNames   = @("{{NodeName1}}", "{{NodeName2}}")
 . (Join-Path $PSScriptRoot 'ALFNodeSettings.ps1')
+$NodeNames   = @(Get-ALFPlannedNodeNames @("{{NodeName1}}", "{{NodeName2}}") "{{NodeCount}}")
 $NodeNames = @(Get-ALFNodeNames (Join-Path $PSScriptRoot 'ALFHostConsole-Nodes.json') $NodeNames)
 $NodeIPStart = "{{NodeIPStart}}"
 $NodeIPEnd   = "{{NodeIPEnd}}"

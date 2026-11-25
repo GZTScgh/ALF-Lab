@@ -76,7 +76,7 @@ try {
         $global:LASTEXITCODE = $priorExit
         Microsoft.PowerShell.Management\Remove-Item -LiteralPath 'function:w32tm.exe'
     }
-    foreach ($version in '2.0.7','2.0.14','2.0.15','2.0.16','2.0.17','2.0.18','2.0.19','2.0.20','2.0.21','2.0.22','2.0.23') {
+    foreach ($version in '2.0.7','2.0.14','2.0.15','2.0.16','2.0.17','2.0.18','2.0.19','2.0.20','2.0.21','2.0.22','2.0.23','2.1.0') {
         $saved = [pscustomobject]@{
             Role='Node'; Version=$version
             Steps=[pscustomobject]@{
@@ -84,13 +84,13 @@ try {
                 Configure=[pscustomobject]@{ Confirmed=$true; ConfirmedAt='old'; Started='start'; ResultPath='receipt'; ProcessId=42; ProcessStarted='UTC' }
             }
         }
-        $records = ConvertTo-ALFGuestRecords $saved 'Node' '2.1.0' @('Configure','Arc')
+        $records = ConvertTo-ALFGuestRecords $saved 'Node' '2.1.1' @('Configure','Arc')
         Assert ($records.Configure.Started -eq 'start' -and $records.Configure.ProcessId -eq 42 -and $records.Configure.ProcessStarted -eq 'UTC' -and $records.Configure.ResultPath -eq 'receipt') 'Preserve compatible execution/process metadata.'
         Assert (-not $records.ContainsKey('Ready') -and -not $records.Configure.ContainsKey('Confirmed')) 'Discard manual cards and confirmation proof.'
     }
-    Assert-Throws { ConvertTo-ALFGuestRecords $saved 'DC' '2.1.0' @('Network') } 'Reject cross-role state.'
+    Assert-Throws { ConvertTo-ALFGuestRecords $saved 'DC' '2.1.1' @('Network') } 'Reject cross-role state.'
     $saved.Version='9.0.0'
-    Assert-Throws { ConvertTo-ALFGuestRecords $saved 'Node' '2.1.0' @('Configure') } 'Reject unsupported state releases.'
+    Assert-Throws { ConvertTo-ALFGuestRecords $saved 'Node' '2.1.1' @('Configure') } 'Reject unsupported state releases.'
     Assert ((Resolve-ALFGuestTaskState (New-ALFGuestCheck 'NotDone' 'Missing') @{Confirmed=$true} $false $null '').State -eq 'NotDone') 'Old confirmations never turn a step green.'
     Assert ((Resolve-ALFGuestTaskState (New-ALFGuestCheck 'NotDone' 'Missing') @{} $false @{ExitCode=0} '').State -eq 'Attention') 'Successful exit is not configuration completion.'
     Assert ((Resolve-ALFGuestTaskState (New-ALFGuestCheck 'Done' 'Detected') @{} $true $null '').State -eq 'Running') 'Running process remains visible.'

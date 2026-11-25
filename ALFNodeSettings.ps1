@@ -1,4 +1,4 @@
-﻿# Version: ALF Lab Builder 2.1.0
+﻿# Version: ALF Lab Builder 2.1.1
 # Shared host-only node selection and Azure Local image helpers; never edits the Planning Console plan.
 
 #The Azure Local image release is the YYMM number from the Planning Console (2608 = the August 2026 release).
@@ -33,7 +33,7 @@ function Test-ALFNodeNames([string[]]$Names) {
 }
 
 #Suggests a name for an added node: the last name with its trailing number increased
-#(AzL2100Node2 -> AzL2100Node3), skipping names already in the list and staying within 15 characters.
+#(AzL2101Node2 -> AzL2101Node3), skipping names already in the list and staying within 15 characters.
 function Get-ALFNextNodeName([string[]]$Names) {
     $last = if ($Names.Count) { $Names[-1] } else { 'Node1' }
     if ($last -match '^(.*?)([0-9]+)$' -and $Matches[1]) { $prefix = $Matches[1]; $number = [long]$Matches[2]; $width = $Matches[2].Length }
@@ -51,6 +51,20 @@ function Get-ALFNextNodeName([string[]]$Names) {
 function Join-ALFNodeNames([string[]]$Names) {
     if ($Names.Count -le 2) { return ($Names -join ' and ') }
     return (($Names[0..($Names.Count - 2)] -join ', ') + ' and ' + $Names[-1])
+}
+
+#The planned node names for the Planning Console's Number of Azure Local nodes (2-16):
+#NodeName1/NodeName2, then suggested names (AzL2101Node3, ...). Unfilled templates pass through unchanged.
+function Get-ALFPlannedNodeNames([string[]]$Names, [string]$Count) {
+    if ("$($Names -join '')$Count" -match '\{\{') { return $Names }
+    if ($Count -notmatch '^([2-9]|1[0-6])$') {
+        throw "The planned Number of Azure Local nodes must be 2 to 16 (got '$Count'). Correct it in the Planning Console and use Roll out scripts."
+    }
+    $planned = [Collections.Generic.List[string]]::new()
+    foreach ($name in $Names) { if ($planned.Count -lt [int]$Count) { $planned.Add($name) } }
+    while ($planned.Count -lt [int]$Count) { $planned.Add((Get-ALFNextNodeName $planned.ToArray())) }
+    Test-ALFNodeNames $planned.ToArray()
+    return $planned.ToArray()
 }
 
 function Get-ALFNodeNames([string]$SettingsPath, [string[]]$DefaultNames) {

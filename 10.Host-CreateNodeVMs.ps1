@@ -1,5 +1,5 @@
 ﻿##############################################################
-# Version: ALF Lab Builder 2.1.0   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.1.1   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # 10.Host-CreateNodeVMs.ps1
 # Creates the Azure Local node VMs and boots them from the Azure Local ISO
 #
@@ -15,10 +15,11 @@
 #   - 4 data disks for Storage Spaces Direct
 ##############################################################
 
-#List of nodes to create
+#List of nodes to create - names and the Number of Azure Local nodes (2-16) are set in the Lab Builder.
+#Nodes after the second get suggested names (AzL2101Node3, ...).
 #Host Console step 9 can replace these names and choose 2-16 nodes (saved in ALFHostConsole-Nodes.json).
-$NodeNameList = @("{{NodeName1}}", "{{NodeName2}}")   #set in the Lab Builder
 . (Join-Path $PSScriptRoot 'ALFNodeSettings.ps1')
+$NodeNameList = @(Get-ALFPlannedNodeNames @("{{NodeName1}}", "{{NodeName2}}") "{{NodeCount}}")
 $NodeNameList = @(Get-ALFNodeNames (Join-Path $PSScriptRoot 'ALFHostConsole-Nodes.json') $NodeNameList)
 
 #Where the VM folders go (each node gets its own subfolder)

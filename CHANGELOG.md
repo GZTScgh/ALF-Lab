@@ -3,6 +3,12 @@
 The version goes up with every change. It's shown at the top of the Lab Builder window,
 in `VERSION.txt` and in the zip file name (`ALF-LabBuilder-v<version>.zip`).
 
+## 2.1.1
+- Planning Console: new **Number of Azure Local nodes** row (2 to 16, default 2) just above the node rows, so SuperHost RAM and vCPUs are budgeted for the planned nodes at the start. The live summary starts with the count (for example *3 nodes: ...*); at the default sizes, 3 or more nodes show INVALID LAB SIZING on the default 96 GB host, and the message points to this row or Host Console step 9. Plans from 2.1.0 and older gain the row (value 2) before the node vCPUs.
+- **Check values** requires the node IP range to hold one address per planned node.
+- Host Console step 9 and scripts 10 and 11 start with the planned count until a step 9 selection is applied; names after NodeName2 continue the numbering (for example `AzL2101Node3`). A saved step 9 selection still wins, and script 10 still checks the budget for the count actually chosen.
+- Bundled cluster identifier 2101; retain same-role v2.1.0 progress and node overrides.
+
 ## 2.1.0
 - Planning Console: new **Azure Local image release** row (2601 to 2611, default 2608). Scripts 01 and 10 and the Host Console download `https://aka.ms/hcireleaseimage/<release>` to `C:\ISO\AzureLocal-<release>.iso`, and reuse an ISO already in `C:\ISO` for the same release. A release that is not published yet (such as 2611) fails the download visibly instead of being used.
 - Planning Console: new optional **Target solution version** row, passed to Arc registration (script 14) so a lab can roll forward without a different ISO. Blank keeps the pick list on each node; the Node Console **Target version (next Arc run)** box still overrides it per node. Plans from 2.0.23 and older gain both rows after the cluster name.
