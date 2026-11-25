@@ -37,8 +37,11 @@ $Region = "{{ArcRegion}}"   #set in the Lab Builder
 #LEARN: The solution version the node is brought to for the initial deployment.
 #       Leave it blank ("") and the script shows a list of available versions to pick from.
 #       Set it to pin every node to the exact same version - useful in labs/workshops so
-#       everyone deploys the same build. The Node Console's "Target version (next Arc run)"
-#       box can set it for one node without editing this file.
+#       everyone deploys the same build, or to roll forward to a newer release than the ISO
+#       the nodes were installed from (no different ISO needed).
+#       It is planned in the Planning Console ("Target solution version (optional)").
+#       The Node Console's "Target version (next Arc run)" box overrides it for one node
+#       without editing this file.
 #LEARN: Version format is Major.YYMM.Build.Revision, for example 12.2610.1004.50:
 #         12   = major line (12 = Azure Local OS 26100 / 24H2, used for new deployments)
 #         2610 = release train as year + month (2610 = October 2026)
@@ -47,7 +50,7 @@ $Region = "{{ArcRegion}}"   #set in the Lab Builder
 #       More published examples: 12.2604.1003.1006, 12.2602.1002.501
 #       For a release newer than these, copy the full version from the Microsoft Learn page
 #       "Azure Local release information" (or pick it from the list when this is left blank).
-$TargetSolutionVersion = ""
+$TargetSolutionVersion = "{{TargetSolutionVersion}}"   #set in the Lab Builder (blank = pick from a list)
 #$TargetSolutionVersion = "12.2610.1004.50"   #<-- example of pinning a version
 if ($TargetSolutionVersionOverride) { $TargetSolutionVersion = $TargetSolutionVersionOverride }
 
@@ -61,8 +64,11 @@ $LogFolder = "C:\ISO\Logs"
 
 
 #Stop if this is the template (values not filled in by the Lab Builder yet)
-if ("$Tenant$Subscription$RG$Region" -match '\{\{') {
+if ("$Tenant$Subscription$RG$Region$TargetSolutionVersion" -match '\{\{') {
     throw "This script still has placeholders ({{...}}). Open the Planning Console (Launch-ALFLabBuilder.cmd), fill in the values, and use 'Roll out scripts'."
+}
+if ($TargetSolutionVersion -and $TargetSolutionVersion -notmatch '^[0-9]+(\.[0-9]+){3}$') {
+    throw "Target solution version '$TargetSolutionVersion' must be blank or four numbers like 12.2610.1004.50. Fix it in the Planning Console and roll out again, or set it in the Node Console."
 }
 
 #Start a transcript - everything on screen is also saved to a file for later review

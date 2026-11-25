@@ -32,7 +32,7 @@ $AdapterNames = @("1-MGMTCOMP1", "2-MGMTCOMP2", "3-STORAGE1", "4-STORAGE2")
 #Files
 $ScriptFolder   = "C:\ISO"                       #where the lab scripts are on the host
 $Template       = "C:\ISO\12.Node-Configure.ps1" #the per-node template (has __NODENAME__ / __NODEIP__)
-$CommonFiles    = @("14.Node-ArcRegister.ps1", "ALFGuestConsole.ps1", "ALFGuestStepRunner.ps1", "ALFGuestStatus.ps1", "ALFGuestDisplay.ps1", "Launch-ALFNodeConsole.cmd")   #shared scripts and guest console
+$CommonFiles    = @("14.Node-ArcRegister.ps1", "ALFGuestConsole.ps1", "ALFGuestStepRunner.ps1", "ALFGuestStatus.ps1", "ALFGuestDisplay.ps1", "Launch-ALFNodeConsole.cmd", "AzureLocal-DeploymentTroubleshooter.ps1")   #shared scripts, guest console and the read-only deployment troubleshooter
 $ExtraFolder    = "C:\ISO\NodeFiles"             #OPTIONAL: anything you drop in here goes to every node too
 $GeneratedRoot  = "C:\ISO\Generated"             #host copy of each node's filled-in files (for reference)
 $GuestFolder    = "C:\ISO"                       #where files land INSIDE each node

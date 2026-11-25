@@ -21,7 +21,7 @@ try {
         '{{DhcpStart}}'='10.44.0.100'; '{{DhcpEnd}}'='10.44.0.150'
         '{{DomainFqdn}}'='contosolab.local'; '{{DomainNetbios}}'='CONTOSOLAB'
         '{{TenantId}}'='11111111-1111-1111-1111-111111111111'; '{{SubscriptionId}}'='22222222-2222-2222-2222-222222222222'
-        '{{ClusterResourceGroup}}'='LabRG'; '{{ArcRegion}}'='southcentralus'
+        '{{ClusterResourceGroup}}'='LabRG'; '{{ArcRegion}}'='southcentralus'; '{{TargetSolutionVersion}}'=''
         '__NODENAME__'='LastMinuteNode3'; '__NODEIP__'='10.44.0.3'
     }
     foreach ($name in '06dc.DC-SetNameAndIP.ps1','07dc.DC-CreateForest.ps1','08dc.DC-PostConfig.ps1','08adm.Admin-Configure.ps1','09dc.DC-PrepareADForAzureLocal.ps1','12.Node-Configure.ps1','14.Node-ArcRegister.ps1') {

@@ -121,10 +121,11 @@ try {
         @{ Source = 'host-runner'; Dest = 'C:\ISO\ALFGuestStepRunner.ps1' },
         @{ Source = 'host-status'; Dest = 'C:\ISO\ALFGuestStatus.ps1' },
         @{ Source = 'host-display'; Dest = 'C:\ISO\ALFGuestDisplay.ps1' },
-        @{ Source = 'host-launcher'; Dest = 'C:\ISO\Launch-ALFNodeConsole.cmd' }
+        @{ Source = 'host-launcher'; Dest = 'C:\ISO\Launch-ALFNodeConsole.cmd' },
+        @{ Source = 'host-troubleshooter'; Dest = 'C:\ISO\AzureLocal-DeploymentTroubleshooter.ps1' }
     )
     Test-ALFNodeCopyList $normalCopies
-    Assert $true 'The normal seven-file delivery must not fail when there are zero extras.'
+    Assert $true 'The normal eight-file delivery must not fail when there are zero extras.'
     Test-ALFNodeCopyList @($normalCopies + @{ Source = 'extra-readme'; Dest = 'C:\ISO\notes.txt' })
     Assert $true 'An extra file with a unique destination must be allowed.'
     $collisionMessage = ''
@@ -135,7 +136,7 @@ try {
     $deliverySources = Join-Path $fixtureRoot 'delivery-sources'
     $deliveryNode = Join-Path $fixtureRoot 'delivery-node'
     $null = New-Item -Path $deliverySources, $deliveryNode -ItemType Directory
-    foreach ($name in '11.Host-PrepareNodes.ps1', '12.Node-Configure.ps1', '14.Node-ArcRegister.ps1', 'ALFGuestConsole.ps1', 'ALFGuestStepRunner.ps1', 'ALFGuestStatus.ps1', 'ALFGuestDisplay.ps1', 'Launch-ALFNodeConsole.cmd') {
+    foreach ($name in '11.Host-PrepareNodes.ps1', '12.Node-Configure.ps1', '14.Node-ArcRegister.ps1', 'ALFGuestConsole.ps1', 'ALFGuestStepRunner.ps1', 'ALFGuestStatus.ps1', 'ALFGuestDisplay.ps1', 'Launch-ALFNodeConsole.cmd', 'AzureLocal-DeploymentTroubleshooter.ps1') {
         Set-Content -LiteralPath (Join-Path $deliverySources $name) -Value 'fixture only'
     }
     Copy-Item -LiteralPath (Join-Path $deliverySources '12.Node-Configure.ps1') -Destination $deliveryNode

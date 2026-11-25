@@ -415,6 +415,36 @@
                        "IdentifierTemplate":  "LABcluster{ClusterIdentifier}"
                    },
                    {
+                       "Key":  "AzureLocalImageRelease",
+                       "Group":  "4. Azure Local cluster",
+                       "Label":  "Azure Local image release",
+                       "Value":  "2608",
+                       "Description":  "Which Azure Local release image (ISO) the host downloads and installs the nodes from, as YYMM: 2608 = August 2026. The host downloads https://aka.ms/hcireleaseimage/\u003crelease\u003e to C:\\ISO\\AzureLocal-\u003crelease\u003e.iso; an ISO already in C:\\ISO for the same release is used as is. Choose it before Prepare data disk (01) and Create node VMs (10). To move an existing lab to a newer version without a different ISO, set Target solution version below instead.",
+                       "Example":  "2608",
+                       "Pattern":  "^2[6-9](0[1-9]|1[0-2])$",
+                       "Hint":  "Pick 2601 to 2611 from the list (YYMM). 2611 may not be published yet - if its download fails, use Open page / the Azure portal, or choose 2610.",
+                       "UsedIn":  "01.Host-PrepareDataDisk.ps1, 10.Host-CreateNodeVMs.ps1, ALFHostConsole.ps1",
+                       "DifferentFrom":  "",
+                       "Type":  "",
+                       "Command":  "",
+                       "Private":  false
+                   },
+                   {
+                       "Key":  "TargetSolutionVersion",
+                       "Group":  "4. Azure Local cluster",
+                       "Label":  "Target solution version (optional)",
+                       "Value":  "",
+                       "Description":  "OPTIONAL. The Azure Local solution version the nodes are brought to when they register with Azure Arc (script 14), so you can plan to roll forward to a newer release without downloading a different ISO. Format Major.YYMM.Build.Revision: in 12.2610.1004.50, 12 is the major line (OS 26100 / 24H2), 2610 is the October 2026 release train, 1004 is the build family and 50 is the revision. Other published examples: 12.2604.1003.1006 and 12.2602.1002.501. For a newer release, copy the full version from the Microsoft Learn page Azure Local release information - do not guess the build or revision. Leave it blank to pick from a list on each node when script 14 runs. The Node Console box Target version (next Arc run) overrides it on one node.",
+                       "Example":  "12.2610.1004.50",
+                       "Pattern":  "^[0-9]+(\\.[0-9]+){3}$",
+                       "Hint":  "Blank (pick on the node), or four numbers like 12.2610.1004.50 (Major.YYMM.Build.Revision)",
+                       "UsedIn":  "14.Node-ArcRegister.ps1",
+                       "DifferentFrom":  "",
+                       "Type":  "optional",
+                       "Command":  "",
+                       "Private":  false
+                   },
+                   {
                        "Example":  "",
                        "Pattern":  "",
                        "DifferentFrom":  "",

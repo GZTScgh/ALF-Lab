@@ -17,6 +17,8 @@
 #     download carries on if you close the console - open it again to see the progress.
 #     If BITS can't download, the console switches to a direct download.
 #   - The image names and links come from 01.Host-PrepareDataDisk.ps1 - change them there.
+#     The Azure Local release (2601-2611) is chosen in the Planning Console. An ISO already in
+#     C:\ISO with Microsoft's full name for that release counts as downloaded.
 #
 # LEARN: BITS (Background Intelligent Transfer Service) is Windows' built-in download engine.
 #        It resumes after network drops and keeps going in the background.
@@ -81,7 +83,7 @@ $Tasks = @(
         Text  = "The disk image for the domain controller and the admin station. Saved to C:\ISO." }
     [pscustomobject]@{ Id = "AzureLocalIso"; Kind = "Download"; Script = ""; Args = ""; Needs = @()
         Title = "Download the Azure Local ISO"
-        Text  = "The install image for the Azure Local nodes. Saved to C:\ISO." }
+        Text  = "The install image for the Azure Local nodes - release {{AzureLocalImageRelease}}, chosen in the Planning Console. Saved to C:\ISO. An ISO already there for the same release is used as is." }
     [pscustomobject]@{ Id = "HyperV";   Kind = "Script";   Script = "02.Host-InstallHyperV.ps1"; Args = ""; Needs = @()
         Title = "Install Hyper-V"
         Text  = "Installs the Hyper-V role and tools. The host restarts at the end (the script asks first) - start the console again after you sign back in." }
@@ -102,7 +104,7 @@ $Tasks = @(
         Text  = "Creates $($NodeNames -join ' and ') with Hyper-V Time Synchronization disabled and starts them from the Azure Local ISO. Then install Azure Local on each node." }
     [pscustomobject]@{ Id = "Prepare";  Kind = "Script";   Script = "11.Host-PrepareNodes.ps1"; Args = ""; Needs = @("Nodes")
         Title = "Prepare the nodes"
-        Text  = "Targets the VM names applied in step 9: $($NodeNames -join ' and '). Disables Hyper-V Time Synchronization on each selected VM. Copies into C:\ISO INSIDE each VM: 12.Node-Configure.ps1, 14.Node-ArcRegister.ps1, ALFGuestConsole.ps1, ALFGuestStepRunner.ps1, ALFGuestStatus.ps1, ALFGuestDisplay.ps1 and Launch-ALFNodeConsole.cmd. The launcher opens the shared ALFGuestConsole in Node mode; there is no separate ALFNodeConsole.ps1. After guest copy verification, open C:\ISO\Launch-ALFNodeConsole.cmd in each VM (SConfig option 15)." }
+        Text  = "Targets the VM names applied in step 9: $($NodeNames -join ' and '). Disables Hyper-V Time Synchronization on each selected VM. Copies into C:\ISO INSIDE each VM: 12.Node-Configure.ps1, 14.Node-ArcRegister.ps1, ALFGuestConsole.ps1, ALFGuestStepRunner.ps1, ALFGuestStatus.ps1, ALFGuestDisplay.ps1, Launch-ALFNodeConsole.cmd and AzureLocal-DeploymentTroubleshooter.ps1. The launcher opens the shared ALFGuestConsole in Node mode; there is no separate ALFNodeConsole.ps1. After guest copy verification, open C:\ISO\Launch-ALFNodeConsole.cmd in each VM (SConfig option 15)." }
 )
 
 
@@ -246,9 +248,18 @@ function Get-ImageInfo([string]$Id) {
                   Dest = Get-ScriptSetting $ImageScript "ServerVhd"; Url = Get-ScriptSetting $ImageScript "ServerVhdUrl"
                   Page = Get-ScriptSetting $ImageScript "ServerVhdPage" }
     }
-    return @{ Name = "Azure Local ISO"; Type = "ISO"; MinGB = $AzureLocalMinGB
-              Dest = Get-ScriptSetting $ImageScript "AzureLocalIso"; Url = Get-ScriptSetting $ImageScript "AzureLocalIsoUrl"
-              Page = Get-ScriptSetting $ImageScript "AzureLocalPage" }
+    $release = Get-ScriptSetting $ImageScript "AzureLocalImageRelease"
+    $info = @{ Name = "Azure Local ISO"; Type = "ISO"; MinGB = $AzureLocalMinGB; Release = $release; Problem = $null
+               Dest = Get-ScriptSetting $ImageScript "AzureLocalIso"; Url = Get-ScriptSetting $ImageScript "AzureLocalIsoUrl"
+               Page = Get-ScriptSetting $ImageScript "AzureLocalPage" }
+    if ($info.Dest) {
+        try {
+            Test-ALFAzureLocalImageRelease $release
+            $info.Dest = Resolve-ALFAzureLocalIso $info.Dest $release
+        }
+        catch { $info.Problem = $_.Exception.Message; $info.Dest = $null }
+    }
+    return $info
 }
 
 function Test-PendingNodeNames {
@@ -285,7 +296,7 @@ function Set-HostNodeNames([string[]]$Names) {
     (Get-Task 'Nodes').Text = "Creates $($NodeNames -join ' and ') with Hyper-V Time Synchronization disabled and starts them from the Azure Local ISO. Then install Azure Local on each node."
     $script:Rows['Nodes'].desc.Text = (Get-Task 'Nodes').Text
     $prepare = Get-Task 'Prepare'
-    $prepare.Text = "Targets the VM names applied in step 9: $($NodeNames -join ' and '). Disables Hyper-V Time Synchronization on each selected VM. Copies into C:\ISO INSIDE each VM: 12.Node-Configure.ps1, 14.Node-ArcRegister.ps1, ALFGuestConsole.ps1, ALFGuestStepRunner.ps1, ALFGuestStatus.ps1, ALFGuestDisplay.ps1 and Launch-ALFNodeConsole.cmd. The launcher opens the shared ALFGuestConsole in Node mode; there is no separate ALFNodeConsole.ps1. After guest copy verification, open C:\ISO\Launch-ALFNodeConsole.cmd in each VM (SConfig option 15)."
+    $prepare.Text = "Targets the VM names applied in step 9: $($NodeNames -join ' and '). Disables Hyper-V Time Synchronization on each selected VM. Copies into C:\ISO INSIDE each VM: 12.Node-Configure.ps1, 14.Node-ArcRegister.ps1, ALFGuestConsole.ps1, ALFGuestStepRunner.ps1, ALFGuestStatus.ps1, ALFGuestDisplay.ps1, Launch-ALFNodeConsole.cmd and AzureLocal-DeploymentTroubleshooter.ps1. The launcher opens the shared ALFGuestConsole in Node mode; there is no separate ALFNodeConsole.ps1. After guest copy verification, open C:\ISO\Launch-ALFNodeConsole.cmd in each VM (SConfig option 15)."
     $script:Rows['Prepare'].desc.Text = $prepare.Text
 }
 
@@ -333,6 +344,7 @@ function Get-TaskCheck($Task) {
         }
         { $_ -in "ServerVhd", "AzureLocalIso" } {
             $img = Get-ImageInfo $Task.Id
+            if ($img.Problem) { return @{ State = "Attention"; Detail = $img.Problem } }
             if (-not $img.Dest) { return @{ State = "Attention"; Detail = "Image name not found in $ImageScript" } }
             if (Test-Path -LiteralPath $img.Dest -PathType Leaf) {
                 return @{ State = "Done"; Detail = ("{0:N1} GB in {1}" -f ((Get-Item -LiteralPath $img.Dest).Length / 1GB), (Split-Path $img.Dest)) }
@@ -512,6 +524,7 @@ function Show-DownloadUI([string]$Id, [bool]$Visible) {
 
 function Start-ImageDownload($Task) {
     $img = Get-ImageInfo $Task.Id
+    if ($img.Problem) { Write-Log $img.Problem; return }
     if (-not $img.Dest) { Write-Log "No image name found in $ImageScript - is it in $Here?"; return }
     if ($img.Url -notmatch '^https://') {
         Write-Log "No download link set in $ImageScript for the $($img.Name) - opening the download page instead. Save the file as $($img.Dest)"
@@ -776,7 +789,7 @@ foreach ($t in $Tasks) {
     }
     else {
         $img = Get-ImageInfo $t.Id
-        $row.script.Text   = if ($img.Dest) { Split-Path $img.Dest -Leaf } else { "(name not found in $ImageScript)" }
+        $row.script.Text   = if ($img.Dest) { Split-Path $img.Dest -Leaf } elseif ($img.Problem) { "(release not set - see the Planning Console)" } else { "(name not found in $ImageScript)" }
         $row.extra.Content = "Open page"
     }
     $row.run.Tag = $t.Id
@@ -803,7 +816,8 @@ function Invoke-ExtraButton([string]$Id) {
     $t = Get-Task $Id
     if ($t.Kind -eq "Download") {
         $img = Get-ImageInfo $Id
-        if ($img.Page) { Start-Process $img.Page; Write-Log "Opened the $($img.Name) download page. A file you download yourself goes in C:\ISO as $(Split-Path $img.Dest -Leaf)" }
+        if ($img.Problem) { Write-Log $img.Problem }
+        elseif ($img.Page) { Start-Process $img.Page; Write-Log "Opened the $($img.Name) download page. A file you download yourself goes in C:\ISO as $(Split-Path $img.Dest -Leaf)" }
     }
     else {
         $path = Join-Path $Here $t.Script

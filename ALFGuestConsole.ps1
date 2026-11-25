@@ -97,6 +97,18 @@ function Apply-GuestTargetVersion {
     }
     Refresh-GuestStatus
 }
+function Start-GuestTroubleshooter {
+    $path = Join-Path $Here 'AzureLocal-DeploymentTroubleshooter.ps1'
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        Write-GuestLog 'AzureLocal-DeploymentTroubleshooter.ps1 is not in this folder. Run step 10 (Prepare the nodes) again in the Host Console to deliver it.'
+        return
+    }
+    try {
+        Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -STA -File `"$path`"" -WorkingDirectory $Here -ErrorAction Stop
+        Write-GuestLog 'Opened the deployment troubleshooter in its own window. Its checks are read-only and run on this node only.'
+    }
+    catch { Write-GuestLog "Could not open the deployment troubleshooter: $($_.Exception.Message)" }
+}
 function Set-GuestConsoleDisplay([bool]$ShowWarning = $false) {
     try {
         Write-GuestLog (Set-ALFGuestDisplayResolution $Role)
@@ -295,6 +307,8 @@ $next = @{
       <WrapPanel Grid.Row="1" Margin="0,0,0,8">
         <Button Name="btnRefresh" Content="Refresh status" Width="150" Margin="0,0,8,0"/>
         <Button Name="btnFolder" Content="Open scripts folder" Width="175" Margin="0,0,8,0"/>
+        <Button Name="btnTroubleshooter" Content="Deployment troubleshooter" Width="215" Margin="0,0,8,0" Visibility="Collapsed"
+                ToolTip="Open the read-only Azure Local deployment troubleshooter (AzureLocal-DeploymentTroubleshooter.ps1) in its own window. It only runs checks on this node."/>
         <Button Name="btnDisplay" Content="1600 x 900 display" Width="165" ToolTip="Set this desktop to 1600 x 900 when supported."/>
       </WrapPanel>
       <TextBox Name="txtLog" Grid.Row="2" IsReadOnly="True" FontFamily="Consolas" FontSize="13"
@@ -342,13 +356,13 @@ $NodeDetailsXaml = @'
         <TextBlock Text="Target version (next Arc run):" FontSize="13" VerticalAlignment="Center" Margin="0,0,6,0"/>
         <TextBox Name="txtTargetVersion" Grid.Column="1" FontFamily="Consolas" FontSize="13" Height="26" MaxLength="64">
           <TextBox.ToolTip>
-            <TextBlock FontFamily="Consolas" FontSize="13" Text="Azure Local solution version: Major.YYMM.Build.Revision&#x0a;  12   = major line (12 = OS 26100 / 24H2, new deployments)&#x0a;  2610 = release train, YYMM (2610 = October 2026)&#x0a;  1004 = build family; copy it from Microsoft, do not guess&#x0a;  50   = revision; a re-release gets a higher number&#x0a;Examples: 12.2610.1004.50  12.2604.1003.1006  12.2602.1002.501&#x0a;Newer release: copy its full version from Microsoft Learn&#x0a;'Azure Local release information'.&#x0a;Apply saves it on this node only; it is used the next time Arc runs.&#x0a;Blank = script default (normally a list to pick from)."/>
+            <TextBlock FontFamily="Consolas" FontSize="13" Text="Azure Local solution version: Major.YYMM.Build.Revision&#x0a;  12   = major line (12 = OS 26100 / 24H2, new deployments)&#x0a;  2610 = release train, YYMM (2610 = October 2026)&#x0a;  1004 = build family; copy it from Microsoft, do not guess&#x0a;  50   = revision; a re-release gets a higher number&#x0a;Examples: 12.2610.1004.50  12.2604.1003.1006  12.2602.1002.501&#x0a;Newer release: copy its full version from Microsoft Learn&#x0a;'Azure Local release information'.&#x0a;Apply saves it on this node only; it is used the next time Arc runs.&#x0a;Blank = the version planned in the Planning Console, or a list to pick from if none was planned."/>
           </TextBox.ToolTip>
         </TextBox>
         <Button Name="btnApplyTargetVersion" Grid.Column="2" Content="Apply" Width="65" Height="26" Margin="6,0,0,0"/>
       </Grid>
       <TextBlock Name="txtTargetVersionHelp" FontSize="12" Foreground="Gray" TextWrapping="Wrap" Margin="0,4,0,0"
-                 Text="Format 12.YYMM.Build.Revision, e.g. 12.2610.1004.50 or 12.2602.1002.501 (2610 = Oct 2026). For a newer release, copy the full version from Microsoft Learn 'Azure Local release information'. Blank = pick from a list."/>
+                 Text="Format 12.YYMM.Build.Revision, e.g. 12.2610.1004.50 or 12.2602.1002.501 (2610 = Oct 2026). For a newer release, copy the full version from Microsoft Learn 'Azure Local release information'. Blank = the planned version, or pick from a list."/>
     </StackPanel>
   </Border>
   <Border Grid.Column="1" BorderBrush="#DDDDDD" BorderThickness="1" Background="White" CornerRadius="4" Padding="10" Margin="6,0,0,0">
@@ -376,7 +390,7 @@ $ui.txtTitle.Text = $window.Title
 $ui.txtVersion.Text = "v$ALFVersion"
 $ui.txtMachine.Text = "$env:COMPUTERNAME | $roleTitle | Scripts: $Here"
 $ui.txtNext.Text = $next
-if ($Role -eq 'Node') { $ui.btnDisplay.Visibility = 'Collapsed' }
+if ($Role -eq 'Node') { $ui.btnDisplay.Visibility = 'Collapsed'; $ui.btnTroubleshooter.Visibility = 'Visible' }
 $count = 0
 foreach ($task in $Tasks) {
     $count++
@@ -405,6 +419,7 @@ if ($Role -eq 'Node') {
 $ui.btnRefresh.Add_Click({ Refresh-GuestStatus })
 $ui.btnFolder.Add_Click({ Start-Process explorer.exe -ArgumentList "`"$Here`"" })
 $ui.btnDisplay.Add_Click({ Set-GuestConsoleDisplay $true })
+$ui.btnTroubleshooter.Add_Click({ Start-GuestTroubleshooter })
 $timer = New-Object Windows.Threading.DispatcherTimer
 $timer.Interval = [TimeSpan]::FromSeconds(10)
 $timer.Add_Tick({ Refresh-GuestStatus })
