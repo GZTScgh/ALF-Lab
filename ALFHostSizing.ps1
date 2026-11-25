@@ -1,4 +1,4 @@
-﻿# Version: ALF Lab Builder 2.0.22
+﻿# Version: ALF Lab Builder 2.1.0
 # SKU capabilities are scoped to the chosen subscription and region.
 function Initialize-ALFHostSizingPlan($Plan) {
     $hostRow = $Plan.Values | Where-Object Key -eq 'HostVMName' | Select-Object -First 1

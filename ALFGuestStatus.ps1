@@ -1,4 +1,4 @@
-# Version: ALF Lab Builder 2.0.22
+# Version: ALF Lab Builder 2.1.0
 # Read-only guest checks. Configuration scripts are inspected, never executed.
 
 $ALFExpectedClusterName = '{{ClusterName}}'
@@ -60,7 +60,7 @@ function Get-ALFGuestScriptConfig([string]$Folder, [string]$File, [string[]]$Nam
 function ConvertTo-ALFGuestTargetVersion([string]$Value = '') {
     $version = $Value.Trim()
     if ($version -and $version -notmatch '^[0-9]+(?:\.[0-9]+){3}$') {
-        throw 'Enter four numeric parts, for example 12.2602.1002.10, or leave blank to use the delivered script default.'
+        throw 'Enter the full Azure Local version as four numeric parts (Major.YYMM.Build.Revision), for example 12.2610.1004.50, or leave blank to use the delivered script default.'
     }
     return $version
 }
@@ -312,7 +312,7 @@ function Resolve-ALFGuestTaskState($Check, $Record, [bool]$Running, $Receipt, [s
 }
 
 function ConvertTo-ALFGuestRecords($Saved, [string]$Role, [string]$Version, [string[]]$Ids) {
-    $compatible = @($Version, '2.0.7', '2.0.8', '2.0.9', '2.0.10', '2.0.11', '2.0.12', '2.0.13', '2.0.14', '2.0.15', '2.0.16', '2.0.17', '2.0.18', '2.0.19', '2.0.20', '2.0.21')
+    $compatible = @($Version, '2.0.7', '2.0.8', '2.0.9', '2.0.10', '2.0.11', '2.0.12', '2.0.13', '2.0.14', '2.0.15', '2.0.16', '2.0.17', '2.0.18', '2.0.19', '2.0.20', '2.0.21', '2.0.22', '2.0.23')
     if ($Saved.Role -ne $Role -or $Saved.Version -notin $compatible -or
         ($Saved.SchemaVersion -and $Saved.SchemaVersion -notin 1, 2) -or -not $Saved.Steps) {
         throw 'State belongs to another role/release, or has an unsupported schema.'

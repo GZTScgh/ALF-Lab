@@ -1,5 +1,5 @@
 ﻿##############################################################
-# Version: ALF Lab Builder 2.0.22   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.1.0   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # 10.Host-CreateNodeVMs.ps1
 # Creates the Azure Local node VMs and boots them from the Azure Local ISO
 #
@@ -23,13 +23,17 @@ $NodeNameList = @(Get-ALFNodeNames (Join-Path $PSScriptRoot 'ALFHostConsole-Node
 #Where the VM folders go (each node gets its own subfolder)
 $VMpath = "F:\VMs"
 
+#Azure Local image release (YYMM) - set in the Lab Builder (2601-2611; 2608 = the August 2026 release)
+$AzureLocalImageRelease = "{{AzureLocalImageRelease}}"
+
 #Azure Local install .ISO
-$InstallMedia = "C:\ISO\AzureLocal24H2.26100.32230.LCM.12.2608.0.3020.x64.en-us.iso"
+#An ISO already in C:\ISO with Microsoft's full name for the same release
+#(...LCM.12.<release>.x.y...iso) is used instead, so it is not downloaded twice.
+$InstallMedia = "C:\ISO\AzureLocal-{{AzureLocalImageRelease}}.iso"
 
 #Where to download the ISO if it's missing from C:\ISO
 #LEARN: aka.ms/hcireleaseimage/<release> points to the Azure Local ISO for that release.
-#       2608 = the August 2026 release. Change the number for a newer release.
-$InstallMediaUrl = "https://aka.ms/hcireleaseimage/2608"
+$InstallMediaUrl = "https://aka.ms/hcireleaseimage/{{AzureLocalImageRelease}}"
 
 #Size of each node
 . (Join-Path $PSScriptRoot 'ALFGuestSizing.ps1')
@@ -67,10 +71,12 @@ if ("$NodeNameList" -match '\{\{') {
 }
 
 Test-ALFNodeNames $NodeNameList
+Test-ALFAzureLocalImageRelease $AzureLocalImageRelease
+$InstallMedia = Resolve-ALFAzureLocalIso $InstallMedia $AzureLocalImageRelease
 Write-Host "Creating Azure Local node VMs" -ForegroundColor Cyan
 
 #========== AZURE LOCAL ISO: CHECK, DOWNLOAD IF MISSING, VERIFY ==========
-Write-Host "  Check for the Azure Local ISO" -ForegroundColor Cyan
+Write-Host "  Check for the Azure Local ISO (release $AzureLocalImageRelease)" -ForegroundColor Cyan
 
 #Clean up a leftover partial download from an earlier interrupted run
 $TempFile = "$InstallMedia.download"
@@ -103,7 +109,7 @@ else {
     $SizeGB = [math]::Round((Get-Item $TempFile).Length / 1GB, 1)
     if ($SizeGB -lt 3) {
         Remove-Item $TempFile -Force
-        throw "Azure Local ISO download is only $SizeGB GB - check `$InstallMediaUrl (or download it from the Azure portal into C:\ISO)"
+        throw "Azure Local ISO download is only $SizeGB GB - release $AzureLocalImageRelease may not be published yet. Choose another release in the Planning Console, or download it from the Azure portal into C:\ISO as $InstallMedia"
     }
 
     #Give it the name the rest of the script expects

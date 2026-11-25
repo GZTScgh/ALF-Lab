@@ -1,5 +1,5 @@
 ﻿##############################################################
-# Version: ALF Lab Builder 2.0.22   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.1.0   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # 01.Host-PrepareDataDisk.ps1
 # Prepares the lab host:
 #   1. Creates C:\ISO and F:\VMs
@@ -50,11 +50,15 @@ $ServerVhdPage = "https://www.microsoft.com/en-us/evalcenter/download-windows-se
 
 #Image 2 - Azure Local ISO (cluster nodes)
 #LEARN: aka.ms/hcireleaseimage/<release> points to the Azure Local ISO for that release.
+#       The release is the YYMM number chosen in the Lab Builder (2608 = August 2026).
 #       The portal route (Azure portal -> Azure Local -> Get started -> Download software)
 #       gives the same image. If $AzureLocalIsoUrl is ever blank, the script falls back to
 #       opening that portal page and waiting for you to download it in the browser.
-$AzureLocalIso    = "C:\ISO\AzureLocal24H2.26100.32230.LCM.12.2608.0.3020.x64.en-us.iso"
-$AzureLocalIsoUrl = "https://aka.ms/hcireleaseimage/2608"   #2608 = Azure Local release; change the number for a newer release
+#       An ISO already in C:\ISO with Microsoft's full name for the same release
+#       (...LCM.12.<release>.x.y...iso) is used as is - it is not downloaded again.
+$AzureLocalImageRelease = "{{AzureLocalImageRelease}}"   #set in the Lab Builder (2601-2611)
+$AzureLocalIso    = "C:\ISO\AzureLocal-{{AzureLocalImageRelease}}.iso"
+$AzureLocalIsoUrl = "https://aka.ms/hcireleaseimage/{{AzureLocalImageRelease}}"
 $AzureLocalPage   = "https://portal.azure.com/#view/Microsoft_Azure_ArcCenterUX/ArcCenterMenuBlade/~/hciGetStarted"
 
 ####### End of variables ######################
@@ -225,12 +229,15 @@ catch { throw "$ServerVhd is not a valid virtual disk - delete it and run this s
 
 
 #========== IMAGE 2: AZURE LOCAL ISO ==========
-Write-Host "  Image 2: Azure Local ISO" -ForegroundColor Cyan
+. (Join-Path $PSScriptRoot 'ALFNodeSettings.ps1')
+Test-ALFAzureLocalImageRelease $AzureLocalImageRelease
+$AzureLocalIso = Resolve-ALFAzureLocalIso $AzureLocalIso $AzureLocalImageRelease
+Write-Host "  Image 2: Azure Local ISO (release $AzureLocalImageRelease)" -ForegroundColor Cyan
 if (Test-Path $AzureLocalIso -PathType Leaf) {
     Write-Host "    Found: $AzureLocalIso ($([math]::Round((Get-Item $AzureLocalIso).Length/1GB,1)) GB) - skipping download" -ForegroundColor Yellow
 }
 elseif ($AzureLocalIsoUrl -match '^https://') {
-    Get-LabFile -Url $AzureLocalIsoUrl -Destination $AzureLocalIso -Name "Azure Local ISO" -MinSizeGB 3
+    Get-LabFile -Url $AzureLocalIsoUrl -Destination $AzureLocalIso -Name "Azure Local $AzureLocalImageRelease ISO" -MinSizeGB 3
 }
 else {
     Write-Host "    Sign in to the Azure portal -> Azure Local -> Get started -> Download software" -ForegroundColor Yellow

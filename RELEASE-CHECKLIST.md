@@ -1,4 +1,15 @@
-# ALF Lab Builder v2.0.22 - release checklist
+# ALF Lab Builder v2.1.0 - release checklist
+
+- [ ] Planning Console group 4: **Azure Local image release** lists 2601 to 2611 (default 2608); rollout fills scripts 01/10 and the Host Console with `C:\ISO\AzureLocal-<release>.iso` and `https://aka.ms/hcireleaseimage/<release>`. An ISO already in `C:\ISO` for the same release is reused; an unpublished release (2611) fails the download visibly (tiny-file check) instead of creating nodes from a bad ISO.
+- [ ] **Target solution version (optional)**: blank leaves script 14's pick list; a four-part value (for example `12.2610.1004.50`) reaches script 14 after rollout; a malformed value fails **Check values**. The Node Console override still wins on that node.
+- [ ] Loading a v2.0.23 plan adds both rows after the cluster name without changing other values or the identifier.
+- [ ] **[untested on guests]** Host Console step 10 delivers and hash-verifies eight files per node, including `AzureLocal-DeploymentTroubleshooter.ps1`. The Node Console **Deployment troubleshooter** button opens it in its own window that fits 1024 x 768; a missing file logs "Run step 10 again".
+- [ ] **[untested on guests]** ALF Admin Console on adm1: **Windows Admin Center and Azure CLI** panel sits below the setup card at 1024 and 1300 widths. **WAC 2611: what's new** and **Download Windows Admin Center** open in Edge; **Install Azure CLI (winget)** opens a PowerShell window and `az version` works in a new window afterwards. Without winget the MSI link is logged. The Admin status card count stays 1. 08adm ends with the panel hint.
+
+- [ ] Node Console: the override box is labeled **Target version (next Arc run)**; the gray line under it shows the `12.YYMM.Build.Revision` format with published examples and names the Microsoft Learn page *Azure Local release information*. Hover the box for the part-by-part tooltip.
+- [ ] At a 1024 x 768 window the Arc card, both detail panels and the help line are visible without scrolling the task area; at 1300 x 850 nothing is clipped.
+- [ ] Enter a well-formed version newer than the examples (for example from the Learn page), Apply, restart the console: it is retained and passed to script 14. A malformed value shows the `Major.YYMM.Build.Revision` message and is not saved.
+- [ ] Same-role v2.0.23 node state (including a saved target override) loads without reset.
 
 - [ ] Planning Console: **Management - Domain** and **Domain NetBIOS name** fill 07dc/08dc/08adm/09dc/12 on rollout; no `contosolab` literals remain when a different domain is planned. Older plans gain a `DomainNetbios` row derived from the domain's first label.
 - [ ] **Check values** flags an OU path that does not end with the planned domain's DN, and a NetBIOS name that is not 1-15 valid characters.
@@ -26,11 +37,11 @@
 
 
 - [ ] Guest consoles have only runnable cards (DC 4, Admin 1, Node 2), concise descriptions, detected status and Run/Open script; keep the Host Console green/blue theme. No manual readiness/confirmation cards remain.
-- [ ] Same-role v2.0.7 through v2.0.21 state retains process/receipt metadata, not old confirmation proof. Reject unsupported role/schema; verify PID plus UTC start time and visible launch/probe/receipt failures. Check compact layout at 1024- and 1300-pixel window widths.
+- [ ] Same-role v2.0.7 through v2.0.23 state retains process/receipt metadata, not old confirmation proof. Reject unsupported role/schema; verify PID plus UTC start time and visible launch/probe/receipt failures. Check compact layout at 1024- and 1300-pixel window widths.
 - [ ] Windows PowerShell: create DC state, then save Forest progress into that existing file. Typed-null File.Replace must succeed and preserve Network progress; failed temporary writes must preserve the original. Accept v2.0.19 state and node overrides without a reset. Run console/status regressions normally in an approved session.
 - [ ] Actual settings, not exit code alone, determine Done: DC identity/domain/DNS/optional DHCP; Admin identity/domain/tools; generated node identity/network/admin/storage; successful Arc bootstrap plus connected agent at the planned target. DC networking stays done after self-DNS configuration.
 - [ ] Node-only read-only Arc values and NTP/domain time-status panels sit below the Arc card at 1024/1300 widths. Copyable tenant/subscription/RG/region/target version match the delivered script; machine is the actual node. Edited/pinned inputs refresh; a blank target prompts selection only during script execution. Time source/last sync/stratum come from `w32tm /query /status`, never a resync. Missing/unfilled/dynamic settings and failed/empty time queries are explicit; one failed panel does not hide the other.
-- [ ] Node **Next run / Apply** accepts four numeric version parts, saves only in that node's state and survives restart. Blank restores the delivered script default. Dirty edits block Arc Run; running steps disable editing. Verify exact named-parameter forwarding only to script 14, no automatic update or installed-version claim, malformed state failure and atomic save preservation. Run focused status/console tests normally.
+- [ ] Node **Target version (next Arc run) / Apply** accepts four numeric version parts, saves only in that node's state and survives restart. Blank restores the delivered script default. Dirty edits block Arc Run; running steps disable editing. Verify exact named-parameter forwarding only to script 14, no automatic update or installed-version claim, malformed state failure and atomic save preservation. Run focused status/console tests normally.
 - [ ] DC AD tools card checks module installation only; optional OU/account exercise and cross-VM/Azure/deployment prerequisites are not claimed verified.
 - [ ] Node setup retains a destructive confirmation. Existing cluster membership disables rerun; deployed lab storage need not remain RAW. An unknown/failed cluster lookup must not allow disk cleanup.
 - [ ] Four prepared RAW disks and no non-primordial storage pool report ready for cluster pooling. A primordial pool alone is normal; actual pools, wrong/non-RAW/offline/read-only disks and genuine provider failures remain visible.
@@ -48,7 +59,7 @@
 
 - [ ] Host Console step 1 and each guest role: any unavailable time-zone ID falls back to Eastern Standard Time. Missing Eastern, time-zone lookup failure and Set-TimeZone failure only warn and continue. Verify valid/already-selected zones and blank values; actual disk/folder errors must still fail. Run tests\GuestTimeZone.Tests.ps1 in an approved PowerShell session without running destructive node configuration solely to test display time.
 
-- [ ] Step 10 accepts all seven normal hashtable delivery entries with zero extras and a unique extra file. Both status/display helpers require matching guest hashes; stale helper receipts stay incomplete. A case-insensitive duplicate destination reports the exact path and both sources.
+- [ ] Step 10 accepts all eight normal hashtable delivery entries with zero extras and a unique extra file. Both status/display helpers require matching guest hashes; stale helper receipts stay incomplete. A case-insensitive duplicate destination reports the exact path and both sources.
 
 - [ ] Section 2: default D48als_v7 and 20 available vCPUs; verify whole-number/max checks, nonblocking CPU-support warnings, selection persistence and command/script parameter parity.
 - [ ] Failed queries or changed subscriptions must not falsely claim verified support or block the default 20-vCPU request. Invalid counts or unknown maxima for nondefault SKUs still block copy/rollout. Script 00 uses the same warning policy in its retained ArcRegion; Azure enforces CPU support during creation.
@@ -59,7 +70,7 @@
 - [ ] Host Console step 9: apply Node3/Node4 names, restart the console, and verify the same pair appears in creation, preparation and per-node configure scripts. Original plan/IP order remain unchanged.
 - [ ] Reject duplicate/invalid/reserved names; block both node steps with unapplied edits and prevent changing names during a running host step.
 - [ ] A previous pair's run history must not complete the newly selected pair; existing VMs must not be renamed or deleted.
-- [ ] Copy `ALFNodeSettings.ps1` with all v2.0.22 host files; retain the host-local `ALFHostConsole-Nodes.json` during refresh.
+- [ ] Copy `ALFNodeSettings.ps1` with all v2.1.0 host files; retain the host-local `ALFHostConsole-Nodes.json` during refresh.
 
 Complete these before publishing. Items marked **[untested]** were changed for the release
 and haven't been run end to end yet.
@@ -74,13 +85,13 @@ and haven't been run end to end yet.
 - [ ] Section 2: **Azure CLI - create host VM** is immediately after **Azure VM name**; double-click copies a PowerShell-compatible command with the plan's subscription, host RG, VM name and administrator account
 - [ ] Applying a student identifier updates the VM command; missing values show **Fill values**. VM region stays **southcentralus**, size **Standard_D48als_v7**; no password is embedded and **--nsg-rule NONE** keeps inbound RDP closed
 - [ ] **[untested]** Deploy the new VM command only after verifying regional SKU availability, quota and nested virtualization; add approved restricted access and shutdown configuration separately. Do not also run script 00 to create the same VM
-- [ ] Cluster identifier defaults to **2022** (version 2.0.22); typing alone leaves all numbered names unchanged and shows **Not applied**
+- [ ] Cluster identifier defaults to **2100** (version 2.1.0); typing alone leaves all numbered names unchanged and shows **Not applied**
 - [ ] **Apply identifier** updates all eleven naming fields and CLI/command previews; no unrelated values change
 - [ ] Save/reload and Export for sharing retain identifier and naming templates; leading zeros (e.g. **0042**) are preserved
 - [ ] Invalid/partial/non-ASCII identifiers and unapplied changes block save, command copy/file generation, Azure preparation and rollout; close-and-save stays open
 - [ ] Regenerated rollout uses the applied identifier everywhere; no stale 2105/1024 lab names remain (1024 GB disks are unchanged)
 - [ ] Older plans load without retargeting names; applying a new identifier preserves prefixes/suffixes and nested OU parents
-- [ ] **[untested]** Fresh PC: unblock the files, launch `Launch-ALFLabBuilder.cmd`; the version badge at the top shows *Version 2.0.22*
+- [ ] **[untested]** Fresh PC: unblock the files, launch `Launch-ALFLabBuilder.cmd`; the version badge at the top shows *Version 2.1.0*
 - [ ] **[untested]** Window titles and headings read `1. ALF Lab Builder - Planning Console` and `2. ALF Lab Builder - Host Console`
 - [ ] Tenant ID and Subscription ID show **Missing** until filled in
 - [ ] **Check values** - everything OK once the IDs are entered
@@ -111,11 +122,11 @@ and haven't been run end to end yet.
       `Select-String -Path .\* -Pattern '<your tenant id>','<your subscription id>','<your user name>'`
 - [ ] No `Rollout` folder, `LabValues.shareable.json`, logs or CSV reports in the package
 - [ ] `LabValues.json` Settings folders are empty and the second local admin password is empty
-- [ ] **[pending]** Update the source guide `ALF-Lab-Build-Guide-v1.0.24.docx` with the new identifier workflow, then publish `ALF-Lab-Build-Guide-v2.0.22.docx` with matching title page, page header and Appendix D. Saved plans retain their chosen four-digit identifier; missing identifiers default to 2022.
+- [ ] **[pending]** Update the source guide `ALF-Lab-Build-Guide-v1.0.24.docx` with the new identifier workflow, then publish `ALF-Lab-Build-Guide-v2.1.0.docx` with matching title page, page header and Appendix D. Saved plans retain their chosen four-digit identifier; missing identifiers default to 2100.
 
 ## Version
 - [ ] Version is the same everywhere: Lab Builder (`$ALFVersion`), `LabValues.json`, `VERSION.txt`, README, CHANGELOG, zip and folder name
-- [ ] Every script header has the same version stamp: `Select-String -Path .\*.ps1,.\*.cmd,.\*.txt -Pattern 'Version: ALF Lab Builder' | Where-Object Line -notmatch '2\.0\.22'` returns nothing
+- [ ] Every script header has the same version stamp: `Select-String -Path .\*.ps1,.\*.cmd,.\*.txt -Pattern 'Version: ALF Lab Builder' | Where-Object Line -notmatch '2\.1\.0'` returns nothing
 - [ ] **[untested]** Roll out scripts with one script from an older release: the log shows a version WARNING for it
 
 ## Decide before publishing

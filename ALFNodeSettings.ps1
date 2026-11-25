@@ -1,5 +1,24 @@
-﻿# Version: ALF Lab Builder 2.0.22
-# Shared host-only node selection; never edits the Planning Console plan.
+﻿# Version: ALF Lab Builder 2.1.0
+# Shared host-only node selection and Azure Local image helpers; never edits the Planning Console plan.
+
+#The Azure Local image release is the YYMM number from the Planning Console (2608 = the August 2026 release).
+function Test-ALFAzureLocalImageRelease([string]$Release) {
+    if ($Release -match '\{\{') { throw 'The Azure Local image release is still a placeholder ({{...}}). Choose it in the Planning Console (4. Azure Local cluster) and use Roll out scripts.' }
+    if ($Release -notmatch '^2[6-9](0[1-9]|1[0-2])$') { throw "Azure Local image release '$Release' is not valid. Use the YYMM release number, for example 2608. The Planning Console lists 2601-2611." }
+}
+
+#Returns the ISO to use: the planned file name if it exists, otherwise an ISO already in the same folder
+#that Microsoft named for the same release (for example AzureLocal24H2.26100.32230.LCM.12.2608.0.3020.x64.en-us.iso).
+function Resolve-ALFAzureLocalIso([string]$Default, [string]$Release) {
+    if (Test-Path -LiteralPath $Default -PathType Leaf) { return $Default }
+    $folder = Split-Path -Path $Default -Parent
+    if ($folder -and $Release -match '^[0-9]{4}$' -and (Test-Path -LiteralPath $folder -PathType Container)) {
+        $match = Get-ChildItem -LiteralPath $folder -Filter 'AzureLocal*.iso' -File -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -like "*.LCM.12.$Release.*" } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+        if ($match) { return $match.FullName }
+    }
+    return $Default
+}
 
 function Test-ALFNodeNames([string[]]$Names) {
     if ($Names.Count -ne 2) { throw 'Enter exactly two node names.' }
@@ -44,7 +63,7 @@ function Get-ALFNodeDeliveryCheck([string]$NodeName, [string]$NodeFolder, [strin
         foreach ($pair in @(@('12.Node-Configure.ps1', 'TemplateHash'), @('11.Host-PrepareNodes.ps1', 'PrepareScriptHash'))) {
             if ((Get-FileHash -LiteralPath (Join-Path $ScriptFolder $pair[0]) -Algorithm SHA256 -ErrorAction Stop).Hash -ne $receipt.($pair[1])) { return $missing }
         }
-        foreach ($name in '12.Node-Configure.ps1', '14.Node-ArcRegister.ps1', 'ALFGuestConsole.ps1', 'ALFGuestStepRunner.ps1', 'ALFGuestStatus.ps1', 'ALFGuestDisplay.ps1', 'Launch-ALFNodeConsole.cmd') {
+        foreach ($name in '12.Node-Configure.ps1', '14.Node-ArcRegister.ps1', 'ALFGuestConsole.ps1', 'ALFGuestStepRunner.ps1', 'ALFGuestStatus.ps1', 'ALFGuestDisplay.ps1', 'Launch-ALFNodeConsole.cmd', 'AzureLocal-DeploymentTroubleshooter.ps1') {
             $entry = @($receipt.Files | Where-Object { $_.Name -ceq $name -and $_.Dest -ceq (Join-Path 'C:\ISO' $name) })
             if ($entry.Count -ne 1 -or $entry[0].Dest -cne (Join-Path 'C:\ISO' $name)) { return $missing }
             $sourceFolder = if ($name -eq '12.Node-Configure.ps1') { $NodeFolder } else { $ScriptFolder }

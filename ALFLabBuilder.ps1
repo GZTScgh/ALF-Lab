@@ -1,5 +1,5 @@
 ﻿##############################################################
-# Version: ALF Lab Builder 2.0.22   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.1.0   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # ALFLabBuilder.ps1   -   1. ALF Lab Builder - Planning Console
 # A simple window for keeping track of every value the Azure Local lab needs,
 # and "rolling out" the lab scripts with those values filled in.
@@ -23,7 +23,7 @@ param(
     [string]$ValuesFile = (Join-Path $PSScriptRoot "LabValues.json")
 )
 
-$ALFVersion = "2.0.22"   #increment on EVERY change (also LabValues.example.json, VERSION.txt, CHANGELOG.md)
+$ALFVersion = "2.1.0"   #increment on EVERY change (also LabValues.example.json, VERSION.txt, CHANGELOG.md)
 . (Join-Path $PSScriptRoot 'ALFHostSizing.ps1')
 . (Join-Path $PSScriptRoot 'ALFGuestSizing.ps1')
 $script:HostSkus = @()
@@ -202,8 +202,15 @@ public class LabValue : INotifyPropertyChanged {
                   <TextBlock Text="{Binding Value}" VerticalAlignment="Center">
                     <TextBlock.Style><Style TargetType="TextBlock"><Style.Triggers>
                       <DataTrigger Binding="{Binding Key}" Value="HostVMSize"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                      <DataTrigger Binding="{Binding Key}" Value="AzureLocalImageRelease"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
                     </Style.Triggers></Style></TextBlock.Style>
                   </TextBlock>
+                  <ComboBox Name="cmbImageRelease" ItemsSource="{Binding Choices}" Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}" IsEditable="True" IsTextSearchEnabled="True"
+                            ToolTip="Azure Local release to download and install the nodes from (YYMM). Pick from the list or type a newer one.">
+                    <ComboBox.Style><Style TargetType="ComboBox"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers>
+                      <DataTrigger Binding="{Binding Key}" Value="AzureLocalImageRelease"><Setter Property="Visibility" Value="Visible"/></DataTrigger>
+                    </Style.Triggers></Style></ComboBox.Style>
+                  </ComboBox>
                   <DockPanel>
                     <DockPanel.Style><Style TargetType="DockPanel"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers>
                       <DataTrigger Binding="{Binding Key}" Value="HostVMSize"><Setter Property="Visibility" Value="Visible"/></DataTrigger>
@@ -404,6 +411,45 @@ function Initialize-ALFDomainPlan($Plan) {
     $Plan.Values = $rows
 }
 
+function Get-ALFImagePlanRows {
+    [pscustomobject]@{
+        Key = 'AzureLocalImageRelease'; Group = '4. Azure Local cluster'; Label = 'Azure Local image release'; Value = '2608'
+        Description = 'Which Azure Local release image (ISO) the host downloads and installs the nodes from, as YYMM: 2608 = August 2026. The host downloads https://aka.ms/hcireleaseimage/<release> to C:\ISO\AzureLocal-<release>.iso; an ISO already in C:\ISO for the same release is used as is. Choose it before Prepare data disk (01) and Create node VMs (10). To move an existing lab to a newer version without a different ISO, set Target solution version below instead.'
+        Example = '2608'; Pattern = '^2[6-9](0[1-9]|1[0-2])$'
+        Hint = 'Pick 2601 to 2611 from the list (YYMM). 2611 may not be published yet - if its download fails, use Open page / the Azure portal, or choose 2610.'
+        UsedIn = '01.Host-PrepareDataDisk.ps1, 10.Host-CreateNodeVMs.ps1, ALFHostConsole.ps1'
+        DifferentFrom = ''; Type = ''; Command = ''; Private = $false
+    }
+    [pscustomobject]@{
+        Key = 'TargetSolutionVersion'; Group = '4. Azure Local cluster'; Label = 'Target solution version (optional)'; Value = ''
+        Description = 'OPTIONAL. The Azure Local solution version the nodes are brought to when they register with Azure Arc (script 14), so you can plan to roll forward to a newer release without downloading a different ISO. Format Major.YYMM.Build.Revision: in 12.2610.1004.50, 12 is the major line (OS 26100 / 24H2), 2610 is the October 2026 release train, 1004 is the build family and 50 is the revision. Other published examples: 12.2604.1003.1006 and 12.2602.1002.501. For a newer release, copy the full version from the Microsoft Learn page Azure Local release information - do not guess the build or revision. Leave it blank to pick from a list on each node when script 14 runs. The Node Console box Target version (next Arc run) overrides it on one node.'
+        Example = '12.2610.1004.50'; Pattern = '^[0-9]+(\.[0-9]+){3}$'
+        Hint = 'Blank (pick on the node), or four numbers like 12.2610.1004.50 (Major.YYMM.Build.Revision)'
+        UsedIn = '14.Node-ArcRegister.ps1'
+        DifferentFrom = ''; Type = 'optional'; Command = ''; Private = $false
+    }
+}
+
+function Initialize-ALFImagePlan($Plan) {
+    #Plans from 2.0.23 and older have no image-release or target-version rows - add them after the cluster name
+    $missing = @(Get-ALFImagePlanRows | Where-Object { $key = $_.Key; -not ($Plan.Values | Where-Object Key -eq $key) })
+    if (-not $missing.Count) { return }
+    $rows = @()
+    $added = $false
+    foreach ($row in $Plan.Values) {
+        $rows += $row
+        if (-not $added -and $row.Key -eq 'ClusterName') { $rows += $missing; $added = $true }
+    }
+    if (-not $added) { $rows += $missing }
+    $Plan.Values = $rows
+}
+
+function Get-ALFImageReleaseChoices([string]$Selected) {
+    $choices = @(2601..2611 | ForEach-Object { [string]$_ })
+    if ($Selected -and $Selected -notin $choices) { $choices += $Selected }
+    return $choices
+}
+
 function Get-ALFDomainDN([string]$DomainFqdn) {
     return (($DomainFqdn.Split('.') | ForEach-Object { "DC=$_" }) -join ',')
 }
@@ -417,6 +463,7 @@ function Load-Values {
     Initialize-ALFHostSizingPlan $script:LabData
     Initialize-ALFGuestSizingPlan $script:LabData
     Initialize-ALFDomainPlan $script:LabData
+    Initialize-ALFImagePlan $script:LabData
     $identifier = [string]$script:LabData.ClusterIdentifier
     if (-not $identifier) {
         $cluster = $script:LabData.Values | Where-Object Key -eq 'ClusterName' | Select-Object -First 1
@@ -431,6 +478,9 @@ function Load-Values {
         $o.Choices = New-Object 'System.Collections.ObjectModel.ObservableCollection[string]'
         if ($o.Key -eq 'HostVMSize') {
             foreach ($choice in Get-ALFHostSizeChoices $o.Value) { $o.Choices.Add($choice) }
+        }
+        elseif ($o.Key -eq 'AzureLocalImageRelease') {
+            foreach ($choice in Get-ALFImageReleaseChoices $o.Value) { $o.Choices.Add($choice) }
         }
         $o.IdentifierTemplate = $v.IdentifierTemplate
         if (-not $o.IdentifierTemplate -and $IdentifierTemplates.Contains($o.Key)) {
@@ -483,6 +533,7 @@ function Save-Values {
     Initialize-ALFHostSizingPlan $disk
     Initialize-ALFGuestSizingPlan $disk
     Initialize-ALFDomainPlan $disk
+    Initialize-ALFImagePlan $disk
     foreach ($v in @($disk.Values)) {
         if ($onScreen.ContainsKey($v.Key)) { $v.Value = $onScreen[$v.Key] }
         $row = $items | Where-Object Key -eq $v.Key | Select-Object -First 1
@@ -665,6 +716,7 @@ function Test-Values([switch]$Quiet) {
         }
         $other = if ($i.DifferentFrom) { $byKey[$i.DifferentFrom] } else { $null }
         if ($i.Type -eq "secret" -and [string]::IsNullOrWhiteSpace($i.Value)) { $i.Status = "Will ask"; continue }
+        if ($i.Type -eq "optional" -and [string]::IsNullOrWhiteSpace($i.Value)) { $i.Status = "Optional"; continue }
         if ([string]::IsNullOrWhiteSpace($i.Value)) {
             $i.Status = "Missing"; $problems++
             if (-not $Quiet) { Write-Log "MISSING  $($i.Label)" }
@@ -825,7 +877,12 @@ function Invoke-Rollout {
 
     #Lookup table: key -> value
     $map = @{}
-    foreach ($i in $items) { if ($i.Type -notin @("reminder", "info", "command", "cli") -and -not [string]::IsNullOrWhiteSpace($i.Value)) { $map[$i.Key] = $i.Value } }
+    foreach ($i in $items) {
+        if ($i.Type -in @("reminder", "info", "command", "cli")) { continue }
+        #Optional values may be blank on purpose - the script then uses its own default
+        if ($i.Type -eq "optional") { $map[$i.Key] = ([string]$i.Value).Trim() }
+        elseif (-not [string]::IsNullOrWhiteSpace($i.Value)) { $map[$i.Key] = $i.Value }
+    }
 
     #Scripts, command files and host/guest console launchers are rolled out; the Planning Console itself is not
     $files = Get-ChildItem -Path $tpl -File | Where-Object {
@@ -943,6 +1000,9 @@ $window.AddHandler([System.Windows.Controls.Primitives.Selector]::SelectionChang
     param($sender, $e)
     if ($e.OriginalSource -is [System.Windows.Controls.ComboBox] -and $e.OriginalSource.Name -eq 'cmbHostSize') {
         $window.Dispatcher.BeginInvoke([action]{ Update-HostSizingStatus | Out-Null; Update-LabSizingStatus | Out-Null; Update-Commands; Update-Details }) | Out-Null
+    }
+    elseif ($e.OriginalSource -is [System.Windows.Controls.ComboBox] -and $e.OriginalSource.Name -eq 'cmbImageRelease') {
+        $window.Dispatcher.BeginInvoke([action]{ Test-Values -Quiet | Out-Null; Update-Details }) | Out-Null
     }
 })
 $ui.grid.Add_CellEditEnding({ $window.Dispatcher.BeginInvoke([action]{ Update-HostSizingStatus | Out-Null; Update-LabSizingStatus | Out-Null; Update-Commands; Update-Details }) | Out-Null })

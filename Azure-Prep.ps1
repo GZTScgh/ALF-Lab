@@ -1,5 +1,5 @@
 ﻿##############################################################
-# Version: ALF Lab Builder 2.0.22   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.1.0   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # Azure-Prep.ps1
 # Quick Azure preparation for the Azure Local lab, using the values from the Lab Builder:
 #   -Step ResourceGroups : create the host VM and cluster resource groups (+ resource providers)

@@ -1,5 +1,5 @@
 ﻿##############################################################
-# Version: ALF Lab Builder 2.0.22   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.1.0   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # 08adm.Admin-Configure.ps1
 # Sets up the admin station: IP, DNS, management tools, then name + domain join
 #
@@ -143,6 +143,7 @@ $named  = $env:COMPUTERNAME -eq $NewName
 if ($joined -and $named) {
     Write-Host "  Already named $NewName and joined to the domain - nothing to do" -ForegroundColor Yellow
     Write-Host "Admin station ready. Sign in as {{DomainNetbios}}\Administrator and open Failover Cluster Manager." -ForegroundColor Green
+    Write-Host "Optional: in the ALF Admin Console, use 'Windows Admin Center and Azure CLI' to download WAC 2611 and install the Azure CLI (winget)." -ForegroundColor Green
     return
 }
 
@@ -160,6 +161,7 @@ Write-Host "    Joined $DomainName as $NewName" -ForegroundColor Green
 Write-Host ""
 Write-Host "Admin station configured. A restart is needed to finish the rename and domain join." -ForegroundColor Green
 Write-Host "After the restart, sign in as {{DomainNetbios}}\Administrator and open Failover Cluster Manager (cluadmin.msc)." -ForegroundColor Green
+Write-Host "Optional: in the ALF Admin Console, use 'Windows Admin Center and Azure CLI' to download WAC 2611 and install the Azure CLI (winget)." -ForegroundColor Green
 Write-Host "Would you like to restart now? (Y/N)" -ForegroundColor Red -BackgroundColor Yellow
 if ((Read-Host "Enter Y or N") -match '^[Yy]$') { Restart-Computer -Force }
 ################

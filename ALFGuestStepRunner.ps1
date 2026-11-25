@@ -1,4 +1,4 @@
-﻿# Version: ALF Lab Builder 2.0.22
+﻿# Version: ALF Lab Builder 2.1.0
 # Runs one guest configuration step. A receipt records execution, not configuration verification.
 param(
     [Parameter(Mandatory = $true)][string]$ScriptPath,

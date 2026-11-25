@@ -1,8 +1,8 @@
-# Version: ALF Lab Builder 2.0.22
+# Version: ALF Lab Builder 2.1.0
 # Shared DC/admin/node console. Completion is detected from this guest.
 param([Parameter(Mandatory = $true)][ValidateSet('DC', 'Admin', 'Node')][string]$Role)
 
-$ALFVersion = '2.0.22'
+$ALFVersion = '2.1.0'
 $Here = $PSScriptRoot
 try {
     Add-Type -AssemblyName PresentationFramework, PresentationCore, WindowsBase -ErrorAction Stop
@@ -96,6 +96,43 @@ function Apply-GuestTargetVersion {
         [Windows.MessageBox]::Show($window, $message, 'Target version', 'OK', 'Warning') | Out-Null
     }
     Refresh-GuestStatus
+}
+function Start-GuestTroubleshooter {
+    $path = Join-Path $Here 'AzureLocal-DeploymentTroubleshooter.ps1'
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        Write-GuestLog 'AzureLocal-DeploymentTroubleshooter.ps1 is not in this folder. Run step 10 (Prepare the nodes) again in the Host Console to deliver it.'
+        return
+    }
+    try {
+        Start-Process powershell.exe -ArgumentList "-NoProfile -ExecutionPolicy Bypass -STA -File `"$path`"" -WorkingDirectory $Here -ErrorAction Stop
+        Write-GuestLog 'Opened the deployment troubleshooter in its own window. Its checks are read-only and run on this node only.'
+    }
+    catch { Write-GuestLog "Could not open the deployment troubleshooter: $($_.Exception.Message)" }
+}
+$AdminLinks = [ordered]@{
+    WacWhatsNew = 'https://techcommunity.microsoft.com/blog/windows-admin-center-blog/virtualization-mode-in-windows-admin-center-is-now-generally-available/4573651'
+    WacDownload = 'https://aka.ms/DownloadWAC'
+    AzureCliMsi = 'https://aka.ms/installazurecliwindowsx64'
+}
+$AzureCliWinget = 'winget install -e --id Microsoft.AzureCLI --source winget --accept-source-agreements --accept-package-agreements'
+function Open-GuestLink([string]$Name, [string]$Url) {
+    try {
+        Start-Process $Url -ErrorAction Stop
+        Write-GuestLog "Opened $Name in the browser: $Url"
+    }
+    catch { Write-GuestLog "Could not open $Name ($($_.Exception.Message)). Copy this link into a browser: $Url" }
+}
+function Start-GuestAzureCliInstall {
+    if (-not (Get-Command winget.exe -ErrorAction SilentlyContinue)) {
+        Write-GuestLog "winget was not found for this user. Sign out and back in so App Installer finishes registering, then try again, or download the Azure CLI installer: $($AdminLinks.AzureCliMsi)"
+        return
+    }
+    $command = "$AzureCliWinget; Write-Host ''; Write-Host 'When winget finishes, open a NEW PowerShell window and run: az version' -ForegroundColor Green"
+    try {
+        Start-Process powershell.exe -ArgumentList "-NoProfile -NoExit -Command `"$command`"" -WorkingDirectory $Here -ErrorAction Stop
+        Write-GuestLog "Started the Azure CLI install in its own window: $AzureCliWinget"
+    }
+    catch { Write-GuestLog "Could not start the Azure CLI install: $($_.Exception.Message). Run this in PowerShell instead: $AzureCliWinget" }
 }
 function Set-GuestConsoleDisplay([bool]$ShowWarning = $false) {
     try {
@@ -295,6 +332,8 @@ $next = @{
       <WrapPanel Grid.Row="1" Margin="0,0,0,8">
         <Button Name="btnRefresh" Content="Refresh status" Width="150" Margin="0,0,8,0"/>
         <Button Name="btnFolder" Content="Open scripts folder" Width="175" Margin="0,0,8,0"/>
+        <Button Name="btnTroubleshooter" Content="Deployment troubleshooter" Width="215" Margin="0,0,8,0" Visibility="Collapsed"
+                ToolTip="Open the read-only Azure Local deployment troubleshooter (AzureLocal-DeploymentTroubleshooter.ps1) in its own window. It only runs checks on this node."/>
         <Button Name="btnDisplay" Content="1600 x 900 display" Width="165" ToolTip="Set this desktop to 1600 x 900 when supported."/>
       </WrapPanel>
       <TextBox Name="txtLog" Grid.Row="2" IsReadOnly="True" FontFamily="Consolas" FontSize="13"
@@ -339,11 +378,16 @@ $NodeDetailsXaml = @'
                FontFamily="Consolas" FontSize="13" TextWrapping="Wrap"/>
       <Grid Margin="0,6,0,0">
         <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-        <TextBlock Text="Next run:" FontSize="13" VerticalAlignment="Center" Margin="0,0,6,0"/>
-        <TextBox Name="txtTargetVersion" Grid.Column="1" FontFamily="Consolas" FontSize="13" Height="26" MaxLength="64"
-                 ToolTip="Node-only target version override, such as 12.2602.1002.10. Blank uses the delivered script default."/>
+        <TextBlock Text="Target version (next Arc run):" FontSize="13" VerticalAlignment="Center" Margin="0,0,6,0"/>
+        <TextBox Name="txtTargetVersion" Grid.Column="1" FontFamily="Consolas" FontSize="13" Height="26" MaxLength="64">
+          <TextBox.ToolTip>
+            <TextBlock FontFamily="Consolas" FontSize="13" Text="Azure Local solution version: Major.YYMM.Build.Revision&#x0a;  12   = major line (12 = OS 26100 / 24H2, new deployments)&#x0a;  2610 = release train, YYMM (2610 = October 2026)&#x0a;  1004 = build family; copy it from Microsoft, do not guess&#x0a;  50   = revision; a re-release gets a higher number&#x0a;Examples: 12.2610.1004.50  12.2604.1003.1006  12.2602.1002.501&#x0a;Newer release: copy its full version from Microsoft Learn&#x0a;'Azure Local release information'.&#x0a;Apply saves it on this node only; it is used the next time Arc runs.&#x0a;Blank = the version planned in the Planning Console, or a list to pick from if none was planned."/>
+          </TextBox.ToolTip>
+        </TextBox>
         <Button Name="btnApplyTargetVersion" Grid.Column="2" Content="Apply" Width="65" Height="26" Margin="6,0,0,0"/>
       </Grid>
+      <TextBlock Name="txtTargetVersionHelp" FontSize="12" Foreground="Gray" TextWrapping="Wrap" Margin="0,4,0,0"
+                 Text="Format 12.YYMM.Build.Revision, e.g. 12.2610.1004.50 or 12.2602.1002.501 (2610 = Oct 2026). For a newer release, copy the full version from Microsoft Learn 'Azure Local release information'. Blank = the planned version, or pick from a list."/>
     </StackPanel>
   </Border>
   <Border Grid.Column="1" BorderBrush="#DDDDDD" BorderThickness="1" Background="White" CornerRadius="4" Padding="10" Margin="6,0,0,0">
@@ -355,6 +399,26 @@ $NodeDetailsXaml = @'
     </StackPanel>
   </Border>
 </Grid>
+'@
+$AdminToolsXaml = @'
+<Border xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        BorderBrush="#DDDDDD" BorderThickness="1" Background="White" CornerRadius="4" Padding="10" Margin="0,2,0,6">
+  <StackPanel>
+    <TextBlock Text="Windows Admin Center and Azure CLI (optional)" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" Foreground="#0B5394"/>
+    <TextBlock TextWrapping="Wrap" Foreground="#444444" Margin="0,2,0,6"
+               Text="Windows Admin Center 2611 adds virtualization mode (vMode) for managing Hyper-V hosts and VMs. Read what's new, download the installer, or install the Azure CLI with winget. These extras do not change the setup step status."/>
+    <WrapPanel>
+      <Button Name="btnWacWhatsNew" Content="WAC 2611: what's new" Width="190" Height="30" Margin="0,0,8,6"
+              ToolTip="Open the Windows Admin Center 2611 announcement (virtualization mode is now generally available) in the browser."/>
+      <Button Name="btnWacDownload" Content="Download Windows Admin Center" Width="250" Height="30" Margin="0,0,8,6"
+              ToolTip="Open https://aka.ms/DownloadWAC in the browser to download the latest Windows Admin Center installer."/>
+      <Button Name="btnAzureCli" Content="Install Azure CLI (winget)" Width="220" Height="30" Margin="0,0,8,6"
+              ToolTip="Install the Azure CLI with winget in its own PowerShell window. Needs internet access."/>
+    </WrapPanel>
+    <TextBox Name="txtAdminLinks" IsReadOnly="True" BorderThickness="0" Background="Transparent" Padding="0"
+             FontFamily="Consolas" FontSize="13" TextWrapping="Wrap" Foreground="Gray"/>
+  </StackPanel>
+</Border>
 '@
 $Brush = New-Object Windows.Media.BrushConverter
 $Colors = @{
@@ -371,7 +435,7 @@ $ui.txtTitle.Text = $window.Title
 $ui.txtVersion.Text = "v$ALFVersion"
 $ui.txtMachine.Text = "$env:COMPUTERNAME | $roleTitle | Scripts: $Here"
 $ui.txtNext.Text = $next
-if ($Role -eq 'Node') { $ui.btnDisplay.Visibility = 'Collapsed' }
+if ($Role -eq 'Node') { $ui.btnDisplay.Visibility = 'Collapsed'; $ui.btnTroubleshooter.Visibility = 'Visible' }
 $count = 0
 foreach ($task in $Tasks) {
     $count++
@@ -397,9 +461,19 @@ if ($Role -eq 'Node') {
     $ui.btnApplyTargetVersion.Add_Click({ Apply-GuestTargetVersion })
     $ui.panelTasks.Children.Add($details) | Out-Null
 }
+if ($Role -eq 'Admin') {
+    $adminTools = [Windows.Markup.XamlReader]::Parse($AdminToolsXaml)
+    foreach ($name in 'btnWacWhatsNew','btnWacDownload','btnAzureCli','txtAdminLinks') { $ui[$name] = $adminTools.FindName($name) }
+    $ui.txtAdminLinks.Text = "WAC 2611 what's new: $($AdminLinks.WacWhatsNew)`r`nWAC download:         $($AdminLinks.WacDownload)`r`nAzure CLI:            $AzureCliWinget"
+    $ui.btnWacWhatsNew.Add_Click({ Open-GuestLink "the Windows Admin Center 2611 announcement" $AdminLinks.WacWhatsNew })
+    $ui.btnWacDownload.Add_Click({ Open-GuestLink 'the Windows Admin Center download' $AdminLinks.WacDownload })
+    $ui.btnAzureCli.Add_Click({ Start-GuestAzureCliInstall })
+    $ui.panelTasks.Children.Add($adminTools) | Out-Null
+}
 $ui.btnRefresh.Add_Click({ Refresh-GuestStatus })
 $ui.btnFolder.Add_Click({ Start-Process explorer.exe -ArgumentList "`"$Here`"" })
 $ui.btnDisplay.Add_Click({ Set-GuestConsoleDisplay $true })
+$ui.btnTroubleshooter.Add_Click({ Start-GuestTroubleshooter })
 $timer = New-Object Windows.Threading.DispatcherTimer
 $timer.Interval = [TimeSpan]::FromSeconds(10)
 $timer.Add_Tick({ Refresh-GuestStatus })
