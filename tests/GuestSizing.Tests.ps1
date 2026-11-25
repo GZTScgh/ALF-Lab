@@ -44,6 +44,15 @@ $custom = $values.Clone(); $custom.HostVMSize = 'Custom (on-premises)'; $custom.
 $custom.NodeVcpus = '24'; $custom.NodeMemoryGB = '64'
 $customBudget = Test-ALFLabSizing $custom $sku
 Assert ($customBudget.GuestMemoryGB -eq 134 -and $customBudget.GuestVcpus -eq 52 -and [string]::IsNullOrEmpty($customBudget.Warning)) 'Use manually entered custom CPU/RAM without Azure metadata checks or unverified-SKU warnings.'
+$threeNodes = Test-ALFLabSizing $custom $sku -NodeCount 3
+Assert ($threeNodes.GuestMemoryGB -eq 198 -and $threeNodes.GuestVcpus -eq 76 -and $threeNodes.Warning -match 'overcommit') 'Budget every node chosen in Host Console step 9.'
+$defaultTooMany = ''
+try { Test-ALFLabSizing $values -NodeCount 3 | Out-Null } catch { $defaultTooMany = $_.Exception.Message }
+Assert ($defaultTooMany -match '3 nodes' -and $defaultTooMany -match 'fewer nodes') 'The default 96-GB host holds only two nodes and says how to fix it.'
+Assert-Throws { Test-ALFLabSizing $custom -NodeCount 16 } 'Sixteen 64-GB nodes do not fit a 256-GB host.'
+foreach ($count in 1, 17) {
+    Assert-Throws { Test-ALFLabSizing $custom -NodeCount $count } 'The lab supports 2 to 16 nodes.'
+}
 $badCustom = $custom.Clone(); $badCustom.NodeMemoryGB = '128'
 Assert-Throws { Test-ALFLabSizing $badCustom } 'Custom hosts still enforce the RAM reserve and guest budget.'
 $badCustom = $custom.Clone(); $badCustom.HostAvailableVcpus = '19'

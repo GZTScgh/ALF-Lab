@@ -20,14 +20,37 @@ function Resolve-ALFAzureLocalIso([string]$Default, [string]$Release) {
     return $Default
 }
 
+#A lab has 2 to 16 Azure Local nodes (the planned pair is the default).
 function Test-ALFNodeNames([string[]]$Names) {
-    if ($Names.Count -ne 2) { throw 'Enter exactly two node names.' }
+    if ($Names.Count -lt 2 -or $Names.Count -gt 16) { throw "Enter 2 to 16 node names (got $($Names.Count))." }
     foreach ($name in $Names) {
         if ($name -notmatch '^[A-Za-z0-9][A-Za-z0-9-]{0,14}$' -or $name -match '^[0-9]+$') {
             throw 'Each node name must be 1-15 letters, digits or hyphens, start with a letter or digit, and not be entirely numeric.'
         }
     }
-    if ($Names[0] -ieq $Names[1]) { throw 'The two node names must be different.' }
+    $duplicates = @($Names | Group-Object | Where-Object Count -gt 1 | ForEach-Object Name)
+    if ($duplicates.Count) { throw "Each node name must be different (repeated: $($duplicates -join ', '))." }
+}
+
+#Suggests a name for an added node: the last name with its trailing number increased
+#(AzL2100Node2 -> AzL2100Node3), skipping names already in the list and staying within 15 characters.
+function Get-ALFNextNodeName([string[]]$Names) {
+    $last = if ($Names.Count) { $Names[-1] } else { 'Node1' }
+    if ($last -match '^(.*?)([0-9]+)$' -and $Matches[1]) { $prefix = $Matches[1]; $number = [long]$Matches[2]; $width = $Matches[2].Length }
+    else { $prefix = $last; $number = 1; $width = 1 }
+    for ($i = 1; $i -le 1000; $i++) {
+        $digits = ($number + $i).ToString().PadLeft($width, '0')
+        $stem = if ($prefix.Length + $digits.Length -gt 15) { $prefix.Substring(0, [Math]::Max(0, 15 - $digits.Length)) } else { $prefix }
+        $candidate = $stem + $digits
+        if ($candidate -match '^[A-Za-z0-9][A-Za-z0-9-]{0,14}$' -and $candidate -notmatch '^[0-9]+$' -and $Names -notcontains $candidate) { return $candidate }
+    }
+    for ($i = 1; $i -le 1000; $i++) { if ($Names -notcontains "Node$i") { return "Node$i" } }
+}
+
+#"A and B" for two names, "A, B and C" for more.
+function Join-ALFNodeNames([string[]]$Names) {
+    if ($Names.Count -le 2) { return ($Names -join ' and ') }
+    return (($Names[0..($Names.Count - 2)] -join ', ') + ' and ' + $Names[-1])
 }
 
 function Get-ALFNodeNames([string]$SettingsPath, [string[]]$DefaultNames) {

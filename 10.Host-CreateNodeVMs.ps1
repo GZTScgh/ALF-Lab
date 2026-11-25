@@ -16,6 +16,7 @@
 ##############################################################
 
 #List of nodes to create
+#Host Console step 9 can replace these names and choose 2-16 nodes (saved in ALFHostConsole-Nodes.json).
 $NodeNameList = @("{{NodeName1}}", "{{NodeName2}}")   #set in the Lab Builder
 . (Join-Path $PSScriptRoot 'ALFNodeSettings.ps1')
 $NodeNameList = @(Get-ALFNodeNames (Join-Path $PSScriptRoot 'ALFHostConsole-Nodes.json') $NodeNameList)
@@ -38,7 +39,7 @@ $InstallMediaUrl = "https://aka.ms/hcireleaseimage/{{AzureLocalImageRelease}}"
 #Size of each node
 . (Join-Path $PSScriptRoot 'ALFGuestSizing.ps1')
 $Sizing = Get-ALFPlannedGuestSizing
-$Budget = Test-ALFLabSizing $Sizing
+$Budget = Test-ALFLabSizing $Sizing -NodeCount $NodeNameList.Count   #every chosen node must fit the host RAM
 Assert-ALFGuestSizingHost $Sizing $Budget
 $MemoryBytes = [long]$Sizing.NodeMemoryGB * 1GB
 $CPUcores = [int]$Sizing.NodeVcpus

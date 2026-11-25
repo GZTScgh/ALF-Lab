@@ -31,7 +31,7 @@
 
 - [ ] Section 2 defaults: SuperHost 96 GB/20 available vCPUs, 16-GB host RAM reserve; DC 2/2 GB, Admin 2/4 GB, each node 12/36 GB. All fields persist and minimums are enforced.
 - [ ] Default summary is 78/80 GB guest budget, 18 GB host headroom, 28 shared guest vCPUs/20 host vCPUs; CPU sharing warns and does not block. RAM over-allocation, a guest exceeding host CPUs or known SKU-memory mismatch blocks command copy/rollout.
-- [ ] Choose a larger matching SKU and increase allocations; both node names (including overrides) receive identical selected sizes. New creation consumes the saved values; existing VMs are not automatically resized.
+- [ ] Choose a larger matching SKU and increase allocations; every applied node name (including overrides) receives identical selected sizes. New creation consumes the saved values; existing VMs are not automatically resized.
 - [ ] Actual undersized SuperHost fails before guest disks/VMs are created; normal nominal-vs-OS RAM accounting is tolerated. Script 00 checks the budget before Azure resource creation.
 - [ ] Run tests\GuestSizing.Tests.ps1 and tests\HostSizing.Tests.ps1 in an approved STA PowerShell session; preserve existing student values when loading older plans.
 
@@ -54,7 +54,7 @@
 
 - [ ] Section 2 accepts 20 / 48 max without refreshing Azure and with missing/unlisted reduced-count metadata; show warnings and retain --v-cpus-available 20 through copy and rollout.
 
-- [ ] All four nested VMs have Hyper-V Time Synchronization disabled after creation; Guest Service Interface remains enabled. Host steps 8/10 repair the same setting on existing VMs without recreation.
+- [ ] All nested VMs (DC, admin station and every applied node) have Hyper-V Time Synchronization disabled after creation; Guest Service Interface remains enabled. Host steps 8/10 repair the same setting on existing VMs without recreation.
 - [ ] Check w32tm /query /source in unjoined guests and after domain join; confirm the domain hierarchy and the DC's valid upstream source. No guest NTP peers or Windows Time policies are overwritten.
 
 - [ ] Host Console step 1 and each guest role: any unavailable time-zone ID falls back to Eastern Standard Time. Missing Eastern, time-zone lookup failure and Set-TimeZone failure only warn and continue. Verify valid/already-selected zones and blank values; actual disk/folder errors must still fail. Run tests\GuestTimeZone.Tests.ps1 in an approved PowerShell session without running destructive node configuration solely to test display time.
@@ -67,9 +67,10 @@
 
 - [ ] Step 10 displays the applied VM destinations and actual console filenames. Verify successful guest hashes and per-VM summary; missing/stopped VM, wrong credentials, adapter error or failed/missing guest copy must leave the step incomplete. Generated host scripts alone cannot mark it done.
 - [ ] Recreated VMs or changed source scripts invalidate delivery receipts. After deleting a guest file, rerun step 10 to detect/restore it; status explicitly shows the last verification time.
-- [ ] Host Console step 9: apply Node3/Node4 names, restart the console, and verify the same pair appears in creation, preparation and per-node configure scripts. Original plan/IP order remain unchanged.
-- [ ] Reject duplicate/invalid/reserved names; block both node steps with unapplied edits and prevent changing names during a running host step.
-- [ ] A previous pair's run history must not complete the newly selected pair; existing VMs must not be renamed or deleted.
+- [ ] Host Console step 9: apply Node3/Node4 names, restart the console, and verify the same names appear in creation, preparation and per-node configure scripts. Original plan/IP order remain unchanged.
+- [ ] **[untested on hosts]** Host Console step 9: **Number of nodes** offers 2-16 (default 2, or the saved count after restart). Raising it adds pre-filled, distinct name boxes; Apply with 3 nodes on a host large enough, then verify script 10 creates 3 VMs, script 11 assigns the first three node IPs in order and step 10 delivers to all three. On the default 96 GB host, script 10 must stop before creating any VM. With the default `.51 - .59` range, Apply must refuse 10 or more nodes.
+- [ ] Reject duplicate/invalid/reserved names; block both node steps with unapplied edits and prevent changing names or the node count during a running host step.
+- [ ] A previous selection's run history must not complete the newly selected nodes; existing VMs must not be renamed or deleted.
 - [ ] Copy `ALFNodeSettings.ps1` with all v2.1.0 host files; retain the host-local `ALFHostConsole-Nodes.json` during refresh.
 
 Complete these before publishing. Items marked **[untested]** were changed for the release

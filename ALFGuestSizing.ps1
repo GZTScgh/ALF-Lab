@@ -8,8 +8,8 @@ function Get-ALFGuestSizingFields {
         @{ Key='DCMemoryGB'; Label='DC RAM (GB, minimum 2)'; Default='2'; Minimum=2; Detail='Static RAM for ContosoDC1. Minimum 2 GB. Increase if the lab has spare memory.' }
         @{ Key='AdminVcpus'; Label='Admin station vCPUs (minimum 2)'; Default='2'; Minimum=2; Detail='Processors for the planned admin station. Minimum 2. CPU is shared across VMs.' }
         @{ Key='AdminMemoryGB'; Label='Admin station RAM (GB, minimum 4)'; Default='4'; Minimum=4; Detail='Static RAM for the planned admin station. Minimum 4 GB.' }
-        @{ Key='NodeVcpus'; Label='Each Azure Local node vCPUs (min 12)'; Default='12'; Minimum=12; Detail='Processors assigned equally to each of the two nodes. Minimum 12 per node. Host step 9 name overrides do not change this sizing.' }
-        @{ Key='NodeMemoryGB'; Label='Each Azure Local node RAM (GB, min 36)'; Default='36'; Minimum=36; Detail='Static RAM assigned equally to each of the two nodes. Minimum 36 GB each; the RAM budget counts this value twice.' }
+        @{ Key='NodeVcpus'; Label='Each Azure Local node vCPUs (min 12)'; Default='12'; Minimum=12; Detail='Processors assigned equally to each node. Minimum 12 per node. The plan budgets 2 nodes; Host Console step 9 can choose up to 16 and checks the host for that many before creating VMs.' }
+        @{ Key='NodeMemoryGB'; Label='Each Azure Local node RAM (GB, min 36)'; Default='36'; Minimum=36; Detail='Static RAM assigned equally to each node. Minimum 36 GB each. The plan budgets 2 nodes (this value twice); Host Console step 9 can choose up to 16 and stops before creating VMs if the host RAM cannot hold that many.' }
     )
 }
 
@@ -35,7 +35,9 @@ function Initialize-ALFGuestSizingPlan($Plan) {
     $Plan.Values = $rows
 }
 
-function Test-ALFLabSizing($Values, $Sku) {
+#NodeCount is the number of Azure Local nodes (2-16); the Planning Console budgets the default 2.
+function Test-ALFLabSizing($Values, $Sku, [int]$NodeCount = 2) {
+    if ($NodeCount -lt 2 -or $NodeCount -gt 16) { throw "The lab needs 2 to 16 Azure Local nodes, not $NodeCount." }
     $numbers = @{}
     $fields = @(@{Key='HostAvailableVcpus'; Label='SuperHost available vCPUs'; Minimum=20}) + @(Get-ALFGuestSizingFields)
     foreach ($field in $fields) {
@@ -71,14 +73,15 @@ function Test-ALFLabSizing($Values, $Sku) {
             throw $exception
         }
     }
-    [long]$guestMemory = [long]$numbers.DCMemoryGB + $numbers.AdminMemoryGB + 2L * $numbers.NodeMemoryGB
+    [long]$guestMemory = [long]$numbers.DCMemoryGB + $numbers.AdminMemoryGB + [long]$NodeCount * $numbers.NodeMemoryGB
     [long]$memoryBudget = [long]$numbers.HostMemoryGB - $numbers.HostMemoryReserveGB
     if ($guestMemory -gt $memoryBudget) {
-        $exception = [ArgumentException]::new("Guests need $guestMemory GB RAM; only $memoryBudget GB is allocatable after the $($numbers.HostMemoryReserveGB)-GB SuperHost reserve. Increase host RAM/choose a matching larger SKU, or reduce guest allocations within their minimums.")
+        $fewer = if ($NodeCount -gt 2) { ', or choose fewer nodes in Host Console step 9' } else { '' }
+        $exception = [ArgumentException]::new("Guests ($NodeCount nodes, DC and admin station) need $guestMemory GB RAM; only $memoryBudget GB is allocatable after the $($numbers.HostMemoryReserveGB)-GB SuperHost reserve. Increase host RAM/choose a matching larger SKU, or reduce guest allocations within their minimums$fewer.")
         $exception.Data['Field'] = 'HostMemoryReserveGB'
         throw $exception
     }
-    [long]$guestCpus = [long]$numbers.DCVcpus + $numbers.AdminVcpus + 2L * $numbers.NodeVcpus
+    [long]$guestCpus = [long]$numbers.DCVcpus + $numbers.AdminVcpus + [long]$NodeCount * $numbers.NodeVcpus
     $warning = if ($guestCpus -gt $numbers.HostAvailableVcpus) {
         "$guestCpus guest vCPUs share $($numbers.HostAvailableVcpus) SuperHost vCPUs. This lab uses CPU overcommit; concurrent CPU-heavy workloads may compete. Guest allocations do not increase the host's available CPU count."
     } else { '' }

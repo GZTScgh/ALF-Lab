@@ -34,6 +34,9 @@ $PlannedNodeNames  = @($NodeNames)
 . (Join-Path $PSScriptRoot 'ALFNodeSettings.ps1')
 $NodeSettingsFile  = Join-Path $PSScriptRoot 'ALFHostConsole-Nodes.json'
 $NodeNames         = @(Get-ALFNodeNames $NodeSettingsFile $PlannedNodeNames)
+#Planned node IP range - node 1 gets the first address, node 2 the next (step 10 assigns them)
+$NodeIPStart       = "{{NodeIPStart}}"
+$NodeIPEnd         = "{{NodeIPEnd}}"
 
 #Host layout - must match the scripts
 $NATSwitchName     = "InternalSwitchNAT"
@@ -101,10 +104,10 @@ $Tasks = @(
         Text  = "Disables Hyper-V Time Synchronization on the DC/admin VMs and copies scripts and guided guest consoles into C:\ISO inside each VM. Adds an ALF DC Console or ALF Admin Console shortcut to local Administrator's desktop in the corresponding VM. After Windows setup, use the desktop shortcut or the matching launcher in C:\ISO." }
     [pscustomobject]@{ Id = "Nodes";    Kind = "Script";   Script = "10.Host-CreateNodeVMs.ps1"; Args = ""; Needs = @("Disk", "AzureLocalIso", "Switches")
         Title = "Create the Azure Local node VMs"
-        Text  = "Creates $($NodeNames -join ' and ') with Hyper-V Time Synchronization disabled and starts them from the Azure Local ISO. Then install Azure Local on each node." }
+        Text  = "Creates $(Join-ALFNodeNames $NodeNames) with Hyper-V Time Synchronization disabled and starts them from the Azure Local ISO. Then install Azure Local on each node." }
     [pscustomobject]@{ Id = "Prepare";  Kind = "Script";   Script = "11.Host-PrepareNodes.ps1"; Args = ""; Needs = @("Nodes")
         Title = "Prepare the nodes"
-        Text  = "Targets the VM names applied in step 9: $($NodeNames -join ' and '). Disables Hyper-V Time Synchronization on each selected VM. Copies into C:\ISO INSIDE each VM: 12.Node-Configure.ps1, 14.Node-ArcRegister.ps1, ALFGuestConsole.ps1, ALFGuestStepRunner.ps1, ALFGuestStatus.ps1, ALFGuestDisplay.ps1, Launch-ALFNodeConsole.cmd and AzureLocal-DeploymentTroubleshooter.ps1. The launcher opens the shared ALFGuestConsole in Node mode; there is no separate ALFNodeConsole.ps1. After guest copy verification, open C:\ISO\Launch-ALFNodeConsole.cmd in each VM (SConfig option 15)." }
+        Text  = "Targets the VM names applied in step 9: $(Join-ALFNodeNames $NodeNames). Disables Hyper-V Time Synchronization on each selected VM. Copies into C:\ISO INSIDE each VM: 12.Node-Configure.ps1, 14.Node-ArcRegister.ps1, ALFGuestConsole.ps1, ALFGuestStepRunner.ps1, ALFGuestStatus.ps1, ALFGuestDisplay.ps1, Launch-ALFNodeConsole.cmd and AzureLocal-DeploymentTroubleshooter.ps1. The launcher opens the shared ALFGuestConsole in Node mode; there is no separate ALFNodeConsole.ps1. After guest copy verification, open C:\ISO\Launch-ALFNodeConsole.cmd in each VM (SConfig option 15)." }
 )
 
 
@@ -171,20 +174,15 @@ $RowXaml = @'
       <TextBlock Name="desc" TextWrapping="Wrap" Foreground="#444444" Margin="0,2,0,0"/>
       <TextBlock Name="script" Foreground="Gray" FontFamily="Consolas" FontSize="13" Margin="0,2,0,0"/>
       <StackPanel Name="nodeOptions" Margin="0,8,0,0" Visibility="Collapsed">
-        <TextBlock Text="Override the two planned node names on this host:" TextWrapping="Wrap"/>
-        <WrapPanel Margin="0,4,0,0">
-          <StackPanel Margin="0,0,10,0">
-            <TextBlock Text="First node name"/>
-            <TextBox Name="nodeName1" Width="185" MaxLength="15"/>
-          </StackPanel>
-          <StackPanel Margin="0,0,10,0">
-            <TextBlock Text="Second node name"/>
-            <TextBox Name="nodeName2" Width="185" MaxLength="15"/>
-          </StackPanel>
-          <Button Name="applyNodes" Content="Apply node names" Padding="10,4" VerticalAlignment="Bottom"/>
-        </WrapPanel>
+        <TextBlock Text="Choose how many Azure Local nodes to create on this host (2-16, default 2) and their names:" TextWrapping="Wrap"/>
+        <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+          <TextBlock Text="Number of nodes" VerticalAlignment="Center" Margin="0,0,8,0"/>
+          <ComboBox Name="nodeCount" Width="70"/>
+        </StackPanel>
+        <WrapPanel Name="nodeNamePanel" Margin="0,4,0,0"/>
+        <Button Name="applyNodes" Content="Apply node names" Padding="10,4" HorizontalAlignment="Left" Margin="0,2,0,0"/>
         <TextBlock Name="nodeSelection" TextWrapping="Wrap" Margin="0,4,0,0"/>
-        <TextBlock Text="Both steps 9 and 10 use these names. First/second retain the planned IP order. Existing VMs are not renamed or deleted; the Planning Console plan is unchanged." TextWrapping="Wrap" Foreground="Gray" FontSize="13"/>
+        <TextBlock Text="Steps 9 and 10 use these names. Node 1 gets the first address of the planned node IP range, node 2 the next, and so on. Every node needs its planned RAM - the default 96 GB host fits only 2 nodes, and step 9 stops before creating VMs if they don't fit. Existing VMs are not renamed or deleted; the Planning Console plan is unchanged." TextWrapping="Wrap" Foreground="Gray" FontSize="13"/>
       </StackPanel>
       <Grid Name="prog" Margin="0,8,0,0" Visibility="Collapsed">
         <ProgressBar Name="bar" Height="22" Minimum="0" Maximum="100" Foreground="#0B5394"/>
@@ -262,20 +260,60 @@ function Get-ImageInfo([string]$Id) {
     return $info
 }
 
+#How many node addresses the planned range holds; mirrors step 10 (script 11), which counts up the last octet.
+#$null when the range is not filled in, so the check is left to step 10.
+function Get-NodeIPCapacity {
+    try {
+        $start = ([System.Net.IPAddress]::Parse($NodeIPStart)).GetAddressBytes()
+        $end   = ([System.Net.IPAddress]::Parse($NodeIPEnd)).GetAddressBytes()
+        if ($start.Count -ne 4 -or $end.Count -ne 4) { return $null }
+        return [Math]::Max(0, [int]$end[3] - [int]$start[3] + 1)
+    }
+    catch { return $null }
+}
+
+#Adds or removes node name boxes on the step 9 card. New boxes use $Names, else the next numbered name.
+function Set-NodeBoxCount($Row, [int]$Count, [string[]]$Names = @()) {
+    while ($Row.nodeBoxes.Count -gt $Count) {
+        $Row.nodeNamePanel.Children.RemoveAt($Row.nodeNamePanel.Children.Count - 1)
+        $Row.nodeBoxes.RemoveAt($Row.nodeBoxes.Count - 1)
+    }
+    while ($Row.nodeBoxes.Count -lt $Count) {
+        $index = $Row.nodeBoxes.Count
+        $panel = New-Object System.Windows.Controls.StackPanel
+        $panel.Margin = New-Object System.Windows.Thickness 0, 0, 10, 4
+        $label = New-Object System.Windows.Controls.TextBlock
+        $label.Text = "Node $($index + 1) name"
+        $box = New-Object System.Windows.Controls.TextBox
+        $box.Width = 185
+        $box.MaxLength = 15
+        $box.Text = if ($index -lt $Names.Count) { $Names[$index] } else { Get-ALFNextNodeName @($Row.nodeBoxes | ForEach-Object { $_.Text.Trim() }) }
+        $box.Add_TextChanged({ Update-NodeSelection })
+        $panel.Children.Add($label) | Out-Null
+        $panel.Children.Add($box) | Out-Null
+        $Row.nodeNamePanel.Children.Add($panel) | Out-Null
+        $Row.nodeBoxes.Add($box) | Out-Null
+    }
+}
+
 function Test-PendingNodeNames {
     $row = $script:Rows['Nodes']
-    return ($row.nodeName1.Text.Trim() -cne $NodeNames[0] -or $row.nodeName2.Text.Trim() -cne $NodeNames[1])
+    if ($row.nodeBoxes.Count -ne $NodeNames.Count) { return $true }
+    for ($i = 0; $i -lt $NodeNames.Count; $i++) {
+        if ($row.nodeBoxes[$i].Text.Trim() -cne $NodeNames[$i]) { return $true }
+    }
+    return $false
 }
 
 function Update-NodeSelection {
     $row = $script:Rows['Nodes']
     $pending = Test-PendingNodeNames
     $row.nodeSelection.Text = if ($pending) {
-        "Pending edits - click Apply node names. Currently applied: $($NodeNames -join ' and ')."
-    } else { "Applied: $($NodeNames -join ' and ')." }
+        "Pending edits - click Apply node names. Currently applied: $(Join-ALFNodeNames $NodeNames)."
+    } else { "Applied: $(Join-ALFNodeNames $NodeNames) ($($NodeNames.Count) nodes)." }
     $row.applyNodes.IsEnabled = -not $script:Running
-    $row.nodeName1.IsEnabled = -not $script:Running
-    $row.nodeName2.IsEnabled = -not $script:Running
+    $row.nodeCount.IsEnabled = -not $script:Running
+    foreach ($box in $row.nodeBoxes) { $box.IsEnabled = -not $script:Running }
     foreach ($id in 'Nodes', 'Prepare') {
         $script:Rows[$id].run.IsEnabled = (-not $script:Running -and -not $pending)
     }
@@ -289,22 +327,26 @@ function Set-HostNodeNames([string[]]$Names) {
             throw "Node name '$name' conflicts with the DC, admin station or host."
         }
     }
+    $capacity = Get-NodeIPCapacity
+    if ($null -ne $capacity -and $capacity -lt $Names.Count) {
+        throw "The planned node IP range $NodeIPStart - $NodeIPEnd holds only $capacity addresses, not enough for $($Names.Count) nodes. Widen the range in the Planning Console (6. Nodes) and roll out the scripts again, or choose fewer nodes."
+    }
     Save-ALFNodeNames $NodeSettingsFile $Names
     $script:NodeNames = @($Names)
     foreach ($id in 'Nodes', 'Prepare') { $script:RunState.Remove($id) }
     Save-RunState
-    (Get-Task 'Nodes').Text = "Creates $($NodeNames -join ' and ') with Hyper-V Time Synchronization disabled and starts them from the Azure Local ISO. Then install Azure Local on each node."
+    (Get-Task 'Nodes').Text = "Creates $(Join-ALFNodeNames $NodeNames) with Hyper-V Time Synchronization disabled and starts them from the Azure Local ISO. Then install Azure Local on each node."
     $script:Rows['Nodes'].desc.Text = (Get-Task 'Nodes').Text
     $prepare = Get-Task 'Prepare'
-    $prepare.Text = "Targets the VM names applied in step 9: $($NodeNames -join ' and '). Disables Hyper-V Time Synchronization on each selected VM. Copies into C:\ISO INSIDE each VM: 12.Node-Configure.ps1, 14.Node-ArcRegister.ps1, ALFGuestConsole.ps1, ALFGuestStepRunner.ps1, ALFGuestStatus.ps1, ALFGuestDisplay.ps1, Launch-ALFNodeConsole.cmd and AzureLocal-DeploymentTroubleshooter.ps1. The launcher opens the shared ALFGuestConsole in Node mode; there is no separate ALFNodeConsole.ps1. After guest copy verification, open C:\ISO\Launch-ALFNodeConsole.cmd in each VM (SConfig option 15)."
+    $prepare.Text = "Targets the VM names applied in step 9: $(Join-ALFNodeNames $NodeNames). Disables Hyper-V Time Synchronization on each selected VM. Copies into C:\ISO INSIDE each VM: 12.Node-Configure.ps1, 14.Node-ArcRegister.ps1, ALFGuestConsole.ps1, ALFGuestStepRunner.ps1, ALFGuestStatus.ps1, ALFGuestDisplay.ps1, Launch-ALFNodeConsole.cmd and AzureLocal-DeploymentTroubleshooter.ps1. The launcher opens the shared ALFGuestConsole in Node mode; there is no separate ALFNodeConsole.ps1. After guest copy verification, open C:\ISO\Launch-ALFNodeConsole.cmd in each VM (SConfig option 15)."
     $script:Rows['Prepare'].desc.Text = $prepare.Text
 }
 
 function Apply-HostNodeNames {
     try {
         $row = $script:Rows['Nodes']
-        Set-HostNodeNames @($row.nodeName1.Text.Trim(), $row.nodeName2.Text.Trim())
-        Write-Log "Applied node names: $($NodeNames -join ' and '). Steps 9 and 10 now use this pair; existing VMs and the saved plan are unchanged."
+        Set-HostNodeNames @($row.nodeBoxes | ForEach-Object { $_.Text.Trim() })
+        Write-Log "Applied $($NodeNames.Count) node names: $(Join-ALFNodeNames $NodeNames). Steps 9 and 10 now use these nodes; existing VMs and the saved plan are unchanged."
         Update-AllStatus
     }
     catch { Write-Log "Node names not applied: $($_.Exception.Message)" }
@@ -771,17 +813,24 @@ foreach ($t in $Tasks) {
     $step++
     $card = [Windows.Markup.XamlReader]::Parse($RowXaml)
     $row = @{}
-    foreach ($n in "numBack", "num", "title", "desc", "script", "prog", "bar", "pct", "progText", "status", "statusDetail", "run", "extra", "nodeOptions", "nodeName1", "nodeName2", "applyNodes", "nodeSelection") { $row[$n] = $card.FindName($n) }
+    foreach ($n in "numBack", "num", "title", "desc", "script", "prog", "bar", "pct", "progText", "status", "statusDetail", "run", "extra", "nodeOptions", "nodeCount", "nodeNamePanel", "applyNodes", "nodeSelection") { $row[$n] = $card.FindName($n) }
     $row.num.Text   = "$step"
     $row.title.Text = $t.Title
     $row.desc.Text  = $t.Text
     if ($t.Id -eq 'Nodes') {
         $row.nodeOptions.Visibility = 'Visible'
-        $row.nodeName1.Text = $NodeNames[0]
-        $row.nodeName2.Text = $NodeNames[1]
+        $row.nodeBoxes = New-Object System.Collections.ArrayList
+        Set-NodeBoxCount $row $NodeNames.Count $NodeNames
+        foreach ($count in 2..16) { $row.nodeCount.Items.Add($count) | Out-Null }
+        $row.nodeCount.SelectedIndex = $NodeNames.Count - 2
+        $row.nodeCount.Add_SelectionChanged({
+            $nodesRow = $script:Rows['Nodes']
+            if ($null -ne $nodesRow.nodeCount.SelectedItem) {
+                Set-NodeBoxCount $nodesRow ([int]$nodesRow.nodeCount.SelectedItem)
+                Update-NodeSelection
+            }
+        })
         $row.applyNodes.Add_Click({ Apply-HostNodeNames })
-        $row.nodeName1.Add_TextChanged({ Update-NodeSelection })
-        $row.nodeName2.Add_TextChanged({ Update-NodeSelection })
     }
     if ($t.Kind -eq "Script") {
         $row.script.Text   = ("{0} {1}" -f $t.Script, $t.Args).Trim()
