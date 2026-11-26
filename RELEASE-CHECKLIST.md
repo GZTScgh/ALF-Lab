@@ -30,6 +30,7 @@
 - [ ] Node IP range first/last and cluster resources range first/last appear together under 6. Nodes, not 3. Lab network. Preserve their values, placeholders, validation rules and network checks after reload/save/rollout.
 
 - [ ] Section 2 defaults: SuperHost 96 GB/20 available vCPUs, 16-GB host RAM reserve; DC 2/2 GB, Admin 2/4 GB, each node 12/36 GB. All fields persist and minimums are enforced.
+- [ ] SuperHost available vCPUs 12 to 19 (try 16) passes with an amber *below the recommended 20* warning in the Planning Console, script 00 and host scripts 04dc/04adm/10; 11 is INVALID LAB SIZING; 20 shows no below-recommended warning. An older plan's "(min 20)" label becomes "(min 12, 20 recommended)" and keeps its value.
 - [ ] Default summary is 78/80 GB guest budget, 18 GB host headroom, 28 shared guest vCPUs/20 host vCPUs; CPU sharing warns and does not block. RAM over-allocation, a guest exceeding host CPUs or known SKU-memory mismatch blocks command copy/rollout.
 - [ ] Choose a larger matching SKU and increase allocations; every applied node name (including overrides) receives identical selected sizes. New creation consumes the saved values; existing VMs are not automatically resized.
 - [ ] Actual undersized SuperHost fails before guest disks/VMs are created; normal nominal-vs-OS RAM accounting is tolerated. Script 00 checks the budget before Azure resource creation.

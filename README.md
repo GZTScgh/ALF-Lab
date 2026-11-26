@@ -48,7 +48,7 @@ Azure VM (super-host, Hyper-V)
 |---|---|
 | **Your PC** (runs the Planning Console) | Windows 10/11 or Windows Server, Windows PowerShell 5.1 (built in). The Azure CLI for the Azure buttons: `winget install -e --id Microsoft.AzureCLI` |
 | **Azure** | A subscription you can create resources in, and **Owner** or **User Access Administrator** to assign the deployment roles |
-| **Host VM** | A size that supports nested virtualization, with **at least 96 GB RAM and 20 available vCPUs** for 2 nodes, DC, admin station and host reserve, and a **1 TB data disk**. Each extra node needs its own node RAM and vCPUs (36 GB and 12 vCPUs by default); set **Number of Azure Local nodes** in the Planning Console to budget them before choosing the host size. Avoid sizes with local temporary disks (a "d" in the name) - they're wiped when the VM stops. |
+| **Host VM** | A size that supports nested virtualization, with **at least 96 GB RAM and 20 available vCPUs** (recommended; 12 to 19 is allowed for testing with a performance warning) for 2 nodes, DC, admin station and host reserve, and a **1 TB data disk**. Each extra node needs its own node RAM and vCPUs (36 GB and 12 vCPUs by default); set **Number of Azure Local nodes** in the Planning Console to budget them before choosing the host size. Avoid sizes with local temporary disks (a "d" in the name) - they're wiped when the VM stops. |
 | **Images** (downloaded by script 01) | Windows Server 2025 evaluation VHDX, and the Azure Local ISO for the chosen image release (2601 to 2611, default 2608) |
 
 ## Quick start
@@ -112,7 +112,7 @@ Revisit setup only when needed. **Node configuration clears data disks; do not r
 
 ### Section 2: SuperHost and guest allocations
 
-Start with **SuperHost RAM** (default/minimum **96 GB**) and **SuperHost available vCPUs** (default/minimum **20**). Keep **Reserve RAM for SuperHost** at **16 GB** by default, or adjust the reserve. CPU/RAM values are positive whole numbers; GB here means the binary unit used by PowerShell/Hyper-V.
+Start with **SuperHost RAM** (default/minimum **96 GB**) and **SuperHost available vCPUs** (default/recommended **20**, minimum **12**). 12 to 19 vCPUs is allowed for testing: the live summary turns amber with a *below the recommended 20* warning, and script 00 and the guest-creation scripts show the same warning; expect slower deployment, updates and validation. 11 or fewer is INVALID LAB SIZING. Keep **Reserve RAM for SuperHost** at **16 GB** by default, or adjust the reserve. CPU/RAM values are positive whole numbers; GB here means the binary unit used by PowerShell/Hyper-V.
 
 | Guest | Default/minimum vCPUs | Default/minimum static RAM |
 |---|---:|---:|
@@ -130,14 +130,14 @@ Rollout includes `ALFGuestSizing.ps1`; keep it beside the Planning Console, scri
 
 **Host VM size (SKU)** is the first field in section 2, so choose the host type before entering its capacity.
 
-**On-premises SuperHost:** choose **Custom (on-premises)** in **Host VM size (SKU)**, then enter the host's available logical processors in **SuperHost available vCPUs** and memory in **SuperHost RAM**. No Azure SKU refresh, 48-vCPU ceiling or SKU-memory matching is applied to this choice. The 20-CPU/96-GB lab minimums, guest minimums, CPU-sharing warning, RAM reserve and actual host-capacity checks still apply. Save and roll out normally; the choice remains available after Azure-size refreshes and reloads.
+**On-premises SuperHost:** choose **Custom (on-premises)** in **Host VM size (SKU)**, then enter the host's available logical processors in **SuperHost available vCPUs** and memory in **SuperHost RAM**. No Azure SKU refresh, 48-vCPU ceiling or SKU-memory matching is applied to this choice. The 12-CPU (20 recommended)/96-GB lab minimums, guest minimums, CPU-sharing warning, RAM reserve and actual host-capacity checks still apply. Save and roll out normally; the choice remains available after Azure-size refreshes and reloads.
 
 Use an existing Windows/Hyper-V SuperHost with the lab's required storage and virtual switches. Copy the rollout to its `C:\ISO` and use the host-side steps; **skip script 00**. The Azure host-creation command shows **Not applicable** and cannot be copied for this choice; script 00 stops before Azure sign-in or resource creation. This option does not provision or resize an on-premises host. Azure prerequisites for Arc and cluster deployment remain unchanged.
 
 The **Host VM size (SKU)** row has an editable selector and **Refresh Azure sizes** button. The initial choice is **Standard_D48als_v7** (48 maximum vCPUs, 96 GiB RAM); **Available vCPUs** initially requests **20**. A saved selection is retained when refreshing or upgrading.
 
 1. Sign in to Azure CLI using your organization's approved process and enter the subscription ID in section 1.
-2. Optionally click **Refresh Azure sizes** in section 2. This read-only query lists subscription-accessible South Central US sizes advertising nested virtualization, Premium SSD, at least 96 GiB RAM and 20 maximum vCPUs and no temporary local disk. It does not guarantee capacity or quota. The default Standard_D48als_v7 can be planned offline using its documented maximum of 48; other sizes need metadata to establish their maximum.
+2. Optionally click **Refresh Azure sizes** in section 2. This read-only query lists subscription-accessible South Central US sizes advertising nested virtualization, Premium SSD, at least 96 GiB RAM and 12 maximum vCPUs and no temporary local disk. It does not guarantee capacity or quota. The default Standard_D48als_v7 can be planned offline using its documented maximum of 48; other sizes need metadata to establish their maximum.
 3. Choose a size, edit **Available vCPUs**, then **Check values**. Positive whole-number requests up to the known SKU maximum pass local validation. Default **20 / 48 max** remains allowed even without an Azure refresh or a reduced-count list. Missing or unlisted CPU-option metadata shows **Check Azure** and a warning; it is not a planning error. Azure may still reject that count during creation.
 4. **Save values**, then copy the create command or **Roll out scripts**. Metadata warnings do not block either action or substitute 48 for your requested 20. Invalid/nonpositive counts, counts above the maximum, and unknown maxima for nondefault sizes still block copy/rollout. Azure capability results are not persisted as a permanent availability guarantee.
 

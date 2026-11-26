@@ -27,6 +27,20 @@ function Initialize-ALFHostSizingPlan($Plan) {
             if ($row.Key -ne 'HostVMSize') { $row }
         }
     )
+    #Plans from 2.1.0 and older say the SuperHost needs 20 vCPUs; it now needs 12 (20 recommended).
+    $cpuRow = $Plan.Values | Where-Object Key -eq 'HostAvailableVcpus' | Select-Object -First 1
+    if ($cpuRow) {
+        $replacements = @{
+            Label = @('(min 20)', '(min 12, 20 recommended)')
+            Description = @('Lab minimum is 20 available vCPUs.', 'Lab minimum is 12 available vCPUs; 20 or more is recommended. 12 to 19 is allowed for testing with a performance warning.')
+            Hint = @('Lab minimum is 20 available vCPUs.', 'Lab minimum is 12 available vCPUs; 20 or more is recommended. 12 to 19 is allowed for testing with a performance warning.')
+        }
+        foreach ($name in $replacements.Keys) {
+            if ($cpuRow.PSObject.Properties[$name] -and $cpuRow.$name) {
+                $cpuRow.$name = ([string]$cpuRow.$name).Replace($replacements[$name][0], $replacements[$name][1])
+            }
+        }
+    }
     $cli = $Plan.Values | Where-Object Key -eq 'CliCreateHostVM' | Select-Object -First 1
     if ($cli -and $cli.Command -notmatch 'HostVMSize') {
         $cli.Command = $cli.Command.Replace('--size Standard_D48als_v7', '--size "{{HostVMSize}}" --v-cpus-available {{HostAvailableVcpus}}')
@@ -49,7 +63,7 @@ function Get-ALFHostSkus([string]$SubscriptionId, [string]$Location) {
         @($_.capabilities | Where-Object { $_.name -eq 'NestedVirtualization' -and $_.value -eq 'True' }).Count -and
         @($_.capabilities | Where-Object { $_.name -eq 'PremiumIO' -and $_.value -eq 'True' }).Count -and
         @($_.capabilities | Where-Object { $_.name -eq 'MemoryGB' -and [double]$_.value -ge 96 }).Count -and
-        @($_.capabilities | Where-Object { $_.name -eq 'vCPUs' -and [int]$_.value -ge 20 }).Count -and
+        @($_.capabilities | Where-Object { $_.name -eq 'vCPUs' -and [int]$_.value -ge 12 }).Count -and
         @($_.capabilities | Where-Object { $_.name -eq 'MaxResourceVolumeMB' -and [double]$_.value -eq 0 }).Count
     } | Sort-Object name)
 }

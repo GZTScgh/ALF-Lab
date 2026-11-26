@@ -7,6 +7,7 @@ in `VERSION.txt` and in the zip file name (`ALF-LabBuilder-v<version>.zip`).
 - Planning Console: new **Number of Azure Local nodes** row (2 to 16, default 2) just above the node rows, so SuperHost RAM and vCPUs are budgeted for the planned nodes at the start. The live summary starts with the count (for example *3 nodes: ...*); at the default sizes, 3 or more nodes show INVALID LAB SIZING on the default 96 GB host, and the message points to this row or Host Console step 9. Plans from 2.1.0 and older gain the row (value 2) before the node vCPUs.
 - **Check values** requires the node IP range to hold one address per planned node.
 - Host Console step 9 and scripts 10 and 11 start with the planned count until a step 9 selection is applied; names after NodeName2 continue the numbering (for example `AzL2101Node3`). A saved step 9 selection still wins, and script 10 still checks the budget for the count actually chosen.
+- **SuperHost available vCPUs** may now be 12 to 19 for testing (for example a 16-vCPU host). It shows an amber *below the recommended 20* performance warning in the Planning Console, script 00 and scripts 04dc, 04adm and 10 instead of blocking. 20 stays the default and recommended value; 11 or fewer is still blocked, and **Refresh Azure sizes** lists sizes with at least 12 vCPUs. Older plans get the updated "(min 12, 20 recommended)" label and keep their value.
 - Bundled cluster identifier 2101; retain same-role v2.1.0 progress and node overrides.
 
 ## 2.1.0

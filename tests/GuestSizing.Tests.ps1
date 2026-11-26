@@ -15,8 +15,16 @@ $values = @{
 $budget = Test-ALFLabSizing $values
 Assert ($budget.GuestMemoryGB -eq 78 -and $budget.AllocatableMemoryGB -eq 80 -and $budget.RemainingHostMemoryGB -eq 18) 'The four default guests must fit a 96-GB host while preserving its 16-GB reserve.'
 Assert ($budget.GuestVcpus -eq 28 -and $budget.Warning -match 'overcommit') 'The 20-vCPU default must allow 28 shared guest vCPUs and warn, not force 28 host CPUs.'
+Assert ($budget.Warning -notmatch 'recommended 20') 'The recommended 20 vCPUs gives no below-recommended warning.'
+foreach ($cpus in '16', '12') {
+    $lean = $values.Clone(); $lean.HostAvailableVcpus = $cpus
+    $leanBudget = Test-ALFLabSizing $lean
+    Assert ($leanBudget.HostVcpus -eq [int]$cpus -and $leanBudget.Warning -match "^$cpus SuperHost vCPUs is below the recommended 20" -and $leanBudget.Warning -match 'overcommit') "$cpus SuperHost vCPUs is allowed for testing with a performance warning."
+}
+$leanNodes = $values.Clone(); $leanNodes.HostAvailableVcpus = '16'; $leanNodes.NodeVcpus = '16'
+Assert ((Test-ALFLabSizing $leanNodes).GuestVcpus -eq 36) 'Nodes may use every vCPU of a 16-vCPU SuperHost.'
 foreach ($case in @(
-    @('HostAvailableVcpus','19'), @('HostMemoryGB','95'), @('HostMemoryReserveGB','0'),
+    @('HostAvailableVcpus','11'),  @('HostMemoryGB','95'), @('HostMemoryReserveGB','0'),
     @('DCVcpus','1'), @('DCMemoryGB','1'), @('AdminVcpus','1'), @('AdminMemoryGB','3'),
     @('NodeVcpus','11'), @('NodeMemoryGB','35'), @('NodeVcpus','21')
 )) {
@@ -67,7 +75,7 @@ foreach ($count in 1, 17) {
 }
 $badCustom = $custom.Clone(); $badCustom.NodeMemoryGB = '128'
 Assert-Throws { Test-ALFLabSizing $badCustom } 'Custom hosts still enforce the RAM reserve and guest budget.'
-$badCustom = $custom.Clone(); $badCustom.HostAvailableVcpus = '19'
+$badCustom = $custom.Clone(); $badCustom.HostAvailableVcpus = '11'
 Assert-Throws { Test-ALFLabSizing $badCustom } 'The same minimum host CPU requirement applies on-premises.'
 $badCustom = $custom.Clone(); $badCustom.HostMemoryGB = '95'
 Assert-Throws { Test-ALFLabSizing $badCustom } 'The same minimum host RAM requirement applies on-premises.'
@@ -102,6 +110,11 @@ try {
     Assert $true 'Allow normal OS/firmware accounting slightly below the nominal 96 GB.'
     $script:HostInfo.NumberOfLogicalProcessors = 16
     Assert-Throws { Assert-ALFGuestSizingHost $values $budget } 'Reject a real host exposing fewer CPUs than planned.'
+    $lean = $values.Clone(); $lean.HostAvailableVcpus = '16'
+    Assert-ALFGuestSizingHost $lean (Test-ALFLabSizing $lean) 3>$null
+    Assert $true 'A 16-vCPU SuperHost planned for 16 vCPUs can create guests (with a warning).'
+    $lean.HostAvailableVcpus = '12'; $script:HostInfo.NumberOfLogicalProcessors = 11
+    Assert-Throws { Assert-ALFGuestSizingHost $lean (Test-ALFLabSizing $lean) } 'Reject a real host below the 12-vCPU lab minimum.'
     $script:HostInfo.NumberOfLogicalProcessors = 20; $script:HostInfo.TotalPhysicalMemory = 80GB
     Assert-Throws { Assert-ALFGuestSizingHost $values $budget } 'Reject a real host too small for the planned RAM and reserve before creating disks or VMs.'
     $script:HostInfo.NumberOfLogicalProcessors = 64; $script:HostInfo.TotalPhysicalMemory = 256GB
@@ -121,6 +134,11 @@ $ui = @{txtSizingSummary=[Windows.Controls.TextBlock]::new()}
 $script:HostSkus = @(); $script:HostSkuContext = ''
 Assert (Update-LabSizingStatus) 'Planning accepts the default budget even without Azure refresh.'
 Assert ($ui.txtSizingSummary.Text -match '78 / 80' -and $ui.txtSizingSummary.Text -match '28 guest vCPUs / 20') 'Show RAM headroom and shared CPU allocations together.'
+($items | Where-Object Key -eq 'HostAvailableVcpus').Value = '16'
+Assert ((Update-LabSizingStatus) -and $ui.txtSizingSummary.Text -match 'below the recommended 20' -and ($items | Where-Object Key -eq 'HostAvailableVcpus').Status -eq '') 'Planning allows a 16-vCPU SuperHost and shows the performance warning.'
+($items | Where-Object Key -eq 'HostAvailableVcpus').Value = '11'
+Assert (-not (Update-LabSizingStatus) -and ($items | Where-Object Key -eq 'HostAvailableVcpus').Status -eq 'Invalid sizing') 'Planning flags a SuperHost below the 12-vCPU minimum.'
+$cpuItem = $items | Where-Object Key -eq 'HostAvailableVcpus'; $cpuItem.Value = '20'; $cpuItem.Status = ''
 $items += [pscustomobject]@{Key='NodeCount';Value='3';Status='';Hint=''}
 Assert (-not (Update-LabSizingStatus) -and $ui.txtSizingSummary.Text -match '3 nodes' -and ($items | Where-Object Key -eq 'HostMemoryReserveGB').Status -eq 'Invalid sizing') 'Planning three nodes on the default SuperHost is flagged before rollout.'
 ($items | Where-Object Key -eq 'NodeCount').Value = '17'

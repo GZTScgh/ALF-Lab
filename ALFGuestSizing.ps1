@@ -81,7 +81,8 @@ function Test-ALFLabSizing($Values, $Sku, [int]$NodeCount = 2) {
     }
     if ($NodeCount -lt 2 -or $NodeCount -gt 16) { throw "The lab needs 2 to 16 Azure Local nodes, not $NodeCount." }
     $numbers = @{}
-    $fields = @(@{Key='HostAvailableVcpus'; Label='SuperHost available vCPUs'; Minimum=20}) + @(Get-ALFGuestSizingFields)
+    #12 is the floor (a node needs 12 vCPUs); 20 is recommended, and 12-19 only warns.
+    $fields = @(@{Key='HostAvailableVcpus'; Label='SuperHost available vCPUs'; Minimum=12}) + @(Get-ALFGuestSizingFields)
     foreach ($field in $fields) {
         $text = [string]$Values[$field.Key]
         $number = 0
@@ -124,9 +125,12 @@ function Test-ALFLabSizing($Values, $Sku, [int]$NodeCount = 2) {
         throw $exception
     }
     [long]$guestCpus = [long]$numbers.DCVcpus + $numbers.AdminVcpus + [long]$NodeCount * $numbers.NodeVcpus
-    $warning = if ($guestCpus -gt $numbers.HostAvailableVcpus) {
-        "$guestCpus guest vCPUs share $($numbers.HostAvailableVcpus) SuperHost vCPUs. This lab uses CPU overcommit; concurrent CPU-heavy workloads may compete. Guest allocations do not increase the host's available CPU count."
+    $warning = if ($numbers.HostAvailableVcpus -lt 20) {
+        "$($numbers.HostAvailableVcpus) SuperHost vCPUs is below the recommended 20 (minimum 12). The lab can run for testing, but expect slower deployment, updates and validation."
     } else { '' }
+    if ($guestCpus -gt $numbers.HostAvailableVcpus) {
+        $warning += " $guestCpus guest vCPUs share $($numbers.HostAvailableVcpus) SuperHost vCPUs. This lab uses CPU overcommit; concurrent CPU-heavy workloads may compete. Guest allocations do not increase the host's available CPU count."
+    }
     if ($knownMemory -eq 0 -and -not $onPremises) { $warning += ' Selected SKU RAM is unverified; the budget uses your declared SuperHost RAM. Actual host capacity is checked before guest creation.' }
     return [pscustomobject]@{
         GuestMemoryGB=$guestMemory; AllocatableMemoryGB=$memoryBudget
@@ -154,8 +158,8 @@ function Assert-ALFGuestSizingHost($Values, $Budget) {
     $hostInfo = Get-CimInstance Win32_ComputerSystem -ErrorAction Stop
     $actualCpus = [int]$hostInfo.NumberOfLogicalProcessors
     $actualMemoryGB = $hostInfo.TotalPhysicalMemory / 1GB
-    if ($actualCpus -lt 20 -or $actualCpus -lt [int]$Values.HostAvailableVcpus) {
-        throw "This SuperHost exposes $actualCpus vCPUs, fewer than the planned $($Values.HostAvailableVcpus) (lab minimum 20). Correct the host sizing before creating guests."
+    if ($actualCpus -lt 12 -or $actualCpus -lt [int]$Values.HostAvailableVcpus) {
+        throw "This SuperHost exposes $actualCpus vCPUs, fewer than the planned $($Values.HostAvailableVcpus) (lab minimum 12, recommended 20). Correct the host sizing before creating guests."
     }
     # Firmware/OS accounting can report slightly less than the installed memory.
     if ([math]::Ceiling($actualMemoryGB) -lt [int]$Values.HostMemoryGB -or $Budget.GuestMemoryGB + $Budget.HostReserveGB -gt $actualMemoryGB) {
