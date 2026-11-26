@@ -1,7 +1,7 @@
-# ALF Lab Builder v2.1.0
+# ALF Lab Builder v2.1.1
 
 A guided, script-based way to build a **nested Azure Local lab inside a single Azure VM**:
-a domain controller, an admin station and a 2-node Azure Local cluster, all running as
+a domain controller, an admin station and an Azure Local cluster (2 nodes by default, up to 16), all running as
 Hyper-V VMs on one Azure "super-host".
 
 It has consoles at each level of the lab:
@@ -26,7 +26,7 @@ as a training exercise.
 
 The local development folder contains `ALF-Lab-Build-Guide-v1.0.24.docx`, covering the lab platform,
 cluster deployment, challenges and troubleshooting. The guide is not included in this repository
-pending privacy review. A matching 2.1.0 guide remains pending.
+pending privacy review. A matching 2.1.1 guide remains pending.
 
 ## What you get
 
@@ -48,7 +48,7 @@ Azure VM (super-host, Hyper-V)
 |---|---|
 | **Your PC** (runs the Planning Console) | Windows 10/11 or Windows Server, Windows PowerShell 5.1 (built in). The Azure CLI for the Azure buttons: `winget install -e --id Microsoft.AzureCLI` |
 | **Azure** | A subscription you can create resources in, and **Owner** or **User Access Administrator** to assign the deployment roles |
-| **Host VM** | A size that supports nested virtualization, with **at least 96 GB RAM and 20 available vCPUs** for 2 nodes, DC, admin station and host reserve, and a **1 TB data disk**. Avoid sizes with local temporary disks (a "d" in the name) - they're wiped when the VM stops. |
+| **Host VM** | A size that supports nested virtualization, with **at least 96 GB RAM and 20 available vCPUs** (recommended; 12 to 19 is allowed for testing with a performance warning) for 2 nodes, DC, admin station and host reserve, and a **1 TB data disk**. Each extra node needs its own node RAM and vCPUs (36 GB and 12 vCPUs by default); set **Number of Azure Local nodes** in the Planning Console to budget them before choosing the host size. Avoid sizes with local temporary disks (a "d" in the name) - they're wiped when the VM stops. |
 | **Images** (downloaded by script 01) | Windows Server 2025 evaluation VHDX, and the Azure Local ISO for the chosen image release (2601 to 2611, default 2608) |
 
 ## Quick start
@@ -67,7 +67,7 @@ Azure VM (super-host, Hyper-V)
    `LabValues.json`, generated `Rollout` files and console progress are ignored by Git; keep them local.
 2. **Open the Planning Console:** double-click `Launch-ALFLabBuilder.cmd`.
 3. **Choose your Cluster identifier** at the top of the Planning Console, then click **Apply identifier**.
-   Saved plans retain their chosen identifier when upgrading; version changes do not rename the lab. If a plan has no identifier, the release-derived default is `2100` for 2.1.0. Choose exactly four digits meaningful to you; leading zeros such as `0042` are kept.
+   Saved plans retain their chosen identifier when upgrading; version changes do not rename the lab. If a plan has no identifier, the release-derived default is `2101` for 2.1.1. Choose exactly four digits meaningful to you; leading zeros such as `0042` are kept.
    **Apply identifier** updates all eleven numbered lab names and refreshes the commands; typing alone does not apply a change.
    Fill in at least your **Tenant ID** and **Subscription ID** (group 1, "Getting started"). Key vault and storage account names must still be globally unique across Azure; a four-digit identifier alone does not guarantee availability.
    In group 4, **Azure Local image release** picks the ISO the host downloads (2601 to 2611 as YYMM, default 2608). Script 01, script 10 and the Host Console use `C:\ISO\AzureLocal-<release>.iso` from `https://aka.ms/hcireleaseimage/<release>`; an ISO already in `C:\ISO` for the same release is reused. 2611 may not be published yet; if its download fails, choose 2610 or download the ISO from the Azure portal. To roll forward without a different ISO, fill in the optional **Target solution version** (for example `12.2610.1004.50`); it is passed to Arc registration (script 14). Leave it blank to pick from a list on each node. Plans saved by older versions gain both rows with these defaults.
@@ -75,6 +75,7 @@ Azure VM (super-host, Hyper-V)
 4. **Prepare Azure** (group 4 has the resource group, region and copyable CLI commands) or use the Azure buttons:
    **1. Create resource groups**, **2. Assign roles on RG**, **3. Review Azure Policy**.
 5. **Roll out scripts.** The filled-in scripts are written to the `Rollout` folder.
+   Rollout always uses the scripts from the same release as the Planning Console. If your saved **Template folder** points at an older or newer release's files (for example a `LabValues.json` copied from a previous version's folder), the Planning Console uses its own folder and `Rollout` subfolder instead and logs a note; a rollout from a folder with mixed-release scripts is blocked and names the file to replace.
 6. **Create the host VM** with `00.Workstation-CreateHostVM.ps1`, then copy everything in the `Rollout` folder to `C:\ISO` on the host VM.
 7. **On the host, start the Host Console** (`Launch-ALFHostConsole.cmd` in `C:\ISO`) and work down its steps. Or run the scripts in order (below) yourself.
 
@@ -112,7 +113,7 @@ Revisit setup only when needed. **Node configuration clears data disks; do not r
 
 ### Section 2: SuperHost and guest allocations
 
-Start with **SuperHost RAM** (default/minimum **96 GB**) and **SuperHost available vCPUs** (default/minimum **20**). Keep **Reserve RAM for SuperHost** at **16 GB** by default, or adjust the reserve. CPU/RAM values are positive whole numbers; GB here means the binary unit used by PowerShell/Hyper-V.
+Start with **SuperHost RAM** (default/minimum **96 GB**) and **SuperHost available vCPUs** (default/recommended **20**, minimum **12**). 12 to 19 vCPUs is allowed for testing: the live summary turns amber with a *below the recommended 20* warning, and script 00 and the guest-creation scripts show the same warning; expect slower deployment, updates and validation. 11 or fewer is INVALID LAB SIZING. Keep **Reserve RAM for SuperHost** at **16 GB** by default, or adjust the reserve. CPU/RAM values are positive whole numbers; GB here means the binary unit used by PowerShell/Hyper-V.
 
 | Guest | Default/minimum vCPUs | Default/minimum static RAM |
 |---|---:|---:|
@@ -120,7 +121,7 @@ Start with **SuperHost RAM** (default/minimum **96 GB**) and **SuperHost availab
 | Planned admin station (ContosoADM1) | 2 | 4 GB |
 | Each Azure Local node | 12 | 36 GB |
 
-All allocations can increase when the host can accommodate them. The two nodes share one sizing choice, counted twice; host-console node-name overrides retain this allocation. The live summary shows guest RAM, allocatable RAM after reserve, RAM left for the host and combined guest CPUs. The defaults use **78 GB guest RAM**, leave **18 GB** for the host and assign **28 shared guest vCPUs** on **20 host vCPUs**. CPU overcommit warns rather than blocking; a single guest cannot exceed the host CPU count. Guest RAM plus reserve exceeding host RAM is an error and blocks host-command copying and rollout. Saving an unfinished plan is still allowed.
+All allocations can increase when the host can accommodate them. All nodes share one sizing choice. **Number of Azure Local nodes** (2 to 16, default 2, just above the node rows) sets how many nodes the Planning Console budgets, so SuperHost RAM and vCPUs are planned at the start: node RAM and vCPUs count once per node, and the live summary starts with the count. At the default sizes, 3 nodes need 114 GB guest RAM, so at least **130 GB** SuperHost RAM with the 16 GB reserve; the default 96 GB host shows INVALID LAB SIZING. Names after NodeName2 continue the numbering (for example `AzL2101Node3`), and **Check values** requires the node IP range to hold one address per planned node. Host Console step 9 starts with the planned count and can still change it; script 10 re-checks the budget for the number of nodes chosen there and stops before creating VMs if they don't fit. The live summary shows guest RAM, allocatable RAM after reserve, RAM left for the host and combined guest CPUs. The defaults use **78 GB guest RAM**, leave **18 GB** for the host and assign **28 shared guest vCPUs** on **20 host vCPUs**. CPU overcommit warns rather than blocking; a single guest cannot exceed the host CPU count. Guest RAM plus reserve exceeding host RAM is an error and blocks host-command copying and rollout. Saving an unfinished plan is still allowed.
 
 **SuperHost RAM is a planning declaration, not an Azure memory setting.** For the default D48als_v7, RAM must remain 96 GB; to use more RAM, select a matching larger SKU and enter its memory. Refreshed metadata checks other known SKUs. Unknown SKU RAM produces a warning; the declared RAM is used for budgeting until verified. Changing available vCPUs does not change a SKU's memory.
 
@@ -130,14 +131,14 @@ Rollout includes `ALFGuestSizing.ps1`; keep it beside the Planning Console, scri
 
 **Host VM size (SKU)** is the first field in section 2, so choose the host type before entering its capacity.
 
-**On-premises SuperHost:** choose **Custom (on-premises)** in **Host VM size (SKU)**, then enter the host's available logical processors in **SuperHost available vCPUs** and memory in **SuperHost RAM**. No Azure SKU refresh, 48-vCPU ceiling or SKU-memory matching is applied to this choice. The 20-CPU/96-GB lab minimums, guest minimums, CPU-sharing warning, RAM reserve and actual host-capacity checks still apply. Save and roll out normally; the choice remains available after Azure-size refreshes and reloads.
+**On-premises SuperHost:** choose **Custom (on-premises)** in **Host VM size (SKU)**, then enter the host's available logical processors in **SuperHost available vCPUs** and memory in **SuperHost RAM**. No Azure SKU refresh, 48-vCPU ceiling or SKU-memory matching is applied to this choice. The 12-CPU (20 recommended)/96-GB lab minimums, guest minimums, CPU-sharing warning, RAM reserve and actual host-capacity checks still apply. Save and roll out normally; the choice remains available after Azure-size refreshes and reloads.
 
 Use an existing Windows/Hyper-V SuperHost with the lab's required storage and virtual switches. Copy the rollout to its `C:\ISO` and use the host-side steps; **skip script 00**. The Azure host-creation command shows **Not applicable** and cannot be copied for this choice; script 00 stops before Azure sign-in or resource creation. This option does not provision or resize an on-premises host. Azure prerequisites for Arc and cluster deployment remain unchanged.
 
 The **Host VM size (SKU)** row has an editable selector and **Refresh Azure sizes** button. The initial choice is **Standard_D48als_v7** (48 maximum vCPUs, 96 GiB RAM); **Available vCPUs** initially requests **20**. A saved selection is retained when refreshing or upgrading.
 
 1. Sign in to Azure CLI using your organization's approved process and enter the subscription ID in section 1.
-2. Optionally click **Refresh Azure sizes** in section 2. This read-only query lists subscription-accessible South Central US sizes advertising nested virtualization, Premium SSD, at least 96 GiB RAM and 20 maximum vCPUs and no temporary local disk. It does not guarantee capacity or quota. The default Standard_D48als_v7 can be planned offline using its documented maximum of 48; other sizes need metadata to establish their maximum.
+2. Optionally click **Refresh Azure sizes** in section 2. This read-only query lists subscription-accessible South Central US sizes advertising nested virtualization, Premium SSD, at least 96 GiB RAM and 12 maximum vCPUs and no temporary local disk. It does not guarantee capacity or quota. The default Standard_D48als_v7 can be planned offline using its documented maximum of 48; other sizes need metadata to establish their maximum.
 3. Choose a size, edit **Available vCPUs**, then **Check values**. Positive whole-number requests up to the known SKU maximum pass local validation. Default **20 / 48 max** remains allowed even without an Azure refresh or a reduced-count list. Missing or unlisted CPU-option metadata shows **Check Azure** and a warning; it is not a planning error. Azure may still reject that count during creation.
 4. **Save values**, then copy the create command or **Roll out scripts**. Metadata warnings do not block either action or substitute 48 for your requested 20. Invalid/nonpositive counts, counts above the maximum, and unknown maxima for nondefault sizes still block copy/rollout. Azure capability results are not persisted as a permanent availability guarantee.
 
@@ -153,7 +154,7 @@ Constrained vCPUs retain the base SKU's memory/I/O and **do not reduce its base 
 | **Coloured sections** | Blue sections (1-3 and 8) are for building the lab; purple sections (4-7) are for building the Azure Local cluster |
 | **Values table** | Every lab value, grouped, with a help panel explaining what it is, its rules and where it's used |
 | **Status column** | `OK`, `Missing`, `Check rule`, `Duplicate`, `Not in network`, `In a range`, `Too small`... |
-| **Network checks** | Every IP inside the lab network, no duplicates, nothing inside the node, cluster resources or DHCP ranges, no overlapping ranges, cluster resources range of at least 6 addresses |
+| **Network checks** | Every IP inside the lab network, no duplicates, nothing inside the node, cluster resources or DHCP ranges, no overlapping ranges, a node IP range with one address per planned node, cluster resources range of at least 6 addresses |
 | **Password rows** | Reminders only - except the optional second local admin password, saved in plain text if you enter it |
 | **Azure CLI rows** | Double-click to copy resource-group commands or the host VM creation command immediately after Azure VM name in section 2 |
 | **Azure buttons** | Create the resource groups, assign the deployment roles, review Azure Policy - each in its own PowerShell window |
@@ -186,7 +187,7 @@ These are compact role-specific views of `ALFGuestConsole.ps1`: a short descript
 
 The Host Console theme is retained: blue headers, white cards, green detected completion, blue running status, amber attention and red failures. **No student confirmation is needed.** Read-only checks inspect this guest's actual name/network, domain/services, DNS/optional DHCP, management tools, node preparation or Arc bootstrap/agent connection. Successful script exit and old confirmations are not completion proof. The AD tools card checks module installation only; optional OU/account creation is not claimed complete.
 
-**Refreshing an existing guest:** close the console, replace the host's `C:\ISO` with the complete matching rollout and retain `ALFHostConsole-Nodes.json`. Rerun **Host Console step 8** (script 05) for DC/admin and **step 10** (script 11) for nodes. Keep guest state/receipts; same-role v2.0.7 through v2.0.23 execution metadata is retained, but old confirmations are ignored. Deliver `ALFGuestStatus.ps1` and `ALFGuestDisplay.ps1` with the console/runner and role scripts. Node delivery now verifies eight required files, including `AzureLocal-DeploymentTroubleshooter.ps1`. Never copy another node's configure script or rerun destructive guest setup merely to refresh the UI.
+**Refreshing an existing guest:** close the console, replace the host's `C:\ISO` with the complete matching rollout and retain `ALFHostConsole-Nodes.json`. Rerun **Host Console step 8** (script 05) for DC/admin and **step 10** (script 11) for nodes. Keep guest state/receipts; same-role v2.0.7 through v2.1.0 execution metadata is retained, but old confirmations are ignored. Deliver `ALFGuestStatus.ps1` and `ALFGuestDisplay.ps1` with the console/runner and role scripts. Node delivery now verifies eight required files, including `AzureLocal-DeploymentTroubleshooter.ps1`. Never copy another node's configure script or rerun destructive guest setup merely to refresh the UI.
 
 **Node registration details:** below the Arc card, copyable read-only panels show the actual machine, tenant ID, subscription ID, resource group, region and target solution version from the delivered `14.Node-ArcRegister.ps1`. A blank target version means selection when the script runs. Beside them, `w32tm /query /status` shows the current time source, last successful synchronization, stratum and other Windows Time status, whether NTP or domain hierarchy is in use. Both refresh with status; inspection/query failures are visible. No sign-in, registration, resynchronization or time-policy changes run from these panels.
 
@@ -229,13 +230,14 @@ It asks for administrator rights and expects to run from `C:\ISO`, with the roll
 | 9. Create the Azure Local node VMs | `10.Host-CreateNodeVMs.ps1` |
 | 10. Prepare the nodes | `11.Host-PrepareNodes.ps1` - shows the exact step-9 destination VM names and verifies console/script copies inside each VM |
 
-- **Step 9 node names:** edit **First node name** and **Second node name**, then click **Apply node names** before Run. For example, change `AzL2001Node1` / `AzL2001Node2` to `AzL2001Node3` / `AzL2001Node4`. Both node steps are disabled while edits are unapplied. Names must be distinct, 1-15 letters/digits/hyphens, start with a letter/digit, and not be entirely numeric; they cannot match the host, DC or admin station.
-- The applied pair is saved on the host in `ALFHostConsole-Nodes.json` beside the scripts. **Steps 9 and 10**, their status checks, and scripts 10/11 run manually all use it. Script 11 generates each node's configure script with the selected name. The first field retains the first planned node IP; the second retains the second IP. This remains a two-node lab, not an add-two-more-nodes feature.
-- **Step 10 destinations and console:** the card shows the two applied VM names and the files copied to `C:\ISO` **inside each selected VM**. Look for `Launch-ALFNodeConsole.cmd`, `ALFGuestConsole.ps1`, `ALFGuestStepRunner.ps1`, `ALFGuestStatus.ps1`, `ALFGuestDisplay.ps1`, `12.Node-Configure.ps1`, `14.Node-ArcRegister.ps1` and `AzureLocal-DeploymentTroubleshooter.ps1`. There is no standalone `ALFNodeConsole.ps1`; the launcher opens the shared console with `-Role Node`.
+- **Step 9 node count and names:** pick **Number of nodes** (2 to 16; it starts at the Planning Console's **Number of Azure Local nodes**, default 2, until you apply a selection); a **Node N name** box appears for each node, and new boxes are pre-filled with the next free number (for example `AzL2001Node3`). Edit the names if needed, then click **Apply node names** before Run. For example, change `AzL2001Node1` / `AzL2001Node2` to `AzL2001Node3` / `AzL2001Node4`. Both node steps are disabled while edits are unapplied. Names must be distinct, 1-15 letters/digits/hyphens, start with a letter/digit, and not be entirely numeric; they cannot match the host, DC or admin station.
+- The applied names are saved on the host in `ALFHostConsole-Nodes.json` beside the scripts. **Steps 9 and 10**, their status checks, and scripts 10/11 run manually all use them. Script 11 generates each node's configure script with the selected name. Node 1 gets the first address of the planned node IP range, node 2 the next, and so on.
+- **More than 2 nodes:** every node gets the planned node RAM/vCPUs, so the default 96 GB host fits only 2 nodes; plan the count and a larger host size in the Planning Console first (script 10 stops before creating any VM if the nodes don't fit). The default node IP range `.51 - .59` holds 9 nodes; for 10 or more, widen **Node IP range** (and move the cluster resources range) in the Planning Console and roll out the scripts again. **Apply node names** refuses a count the range can't hold.
+- **Step 10 destinations and console:** the card shows the applied VM names and the files copied to `C:\ISO` **inside each selected VM**. Look for `Launch-ALFNodeConsole.cmd`, `ALFGuestConsole.ps1`, `ALFGuestStepRunner.ps1`, `ALFGuestStatus.ps1`, `ALFGuestDisplay.ps1`, `12.Node-Configure.ps1`, `14.Node-ArcRegister.ps1` and `AzureLocal-DeploymentTroubleshooter.ps1`. There is no standalone `ALFNodeConsole.ps1`; the launcher opens the shared console with `-Role Node`.
 - Step 10 uses PowerShell Direct to verify every delivered file's SHA-256 against the host copy. Missing/stopped VMs, failed guest sign-in, adapter errors, copy failures or missing/mismatched guest files make the step fail, with per-VM results. A verified-delivery receipt is saved to `C:\ISO\Generated\<VMName>\ALFNodeDelivery.json` **on the host** only after verification. The Host Console no longer treats a generated host script as proof of delivery. Status reports the last verification time; it is not continuous monitoring of guest files. If files disappear later, rerun step 10 to verify/deliver again. Old generated folders without receipts require a rerun.
 - **v2.0.14 fixes a false duplicate-destination error** in step 10 even with zero extra files. Refresh the host scripts and rerun step 10; do not delete NodeFiles contents merely because an older version reported a duplicate. A genuine collision now names the guest path and both source files.
 - When troubleshooting, keep the complete current rollout in host `C:\ISO`, retain `ALFHostConsole-Nodes.json`, check the applied VM names in step 9, then rerun step 10 and read its per-VM summary. Do not rerun guest configuration step 12 merely to obtain the console; that step can clean data disks.
-- Applying does **not** rename/delete existing VMs, change the Planning Console plan, or change cluster/resource names. Node run history is tied to the selected pair. To revert, re-enter the planned names and Apply (or close the console and remove `ALFHostConsole-Nodes.json`). Keep this host-local file when refreshing rollout files. The v2.0.17 helper `ALFNodeSettings.ps1` must be copied with the host scripts.
+- Applying does **not** rename/delete existing VMs, change the Planning Console plan, or change cluster/resource names. Node run history is tied to the selected names. To revert, re-enter the planned names and Apply (or close the console and remove `ALFHostConsole-Nodes.json`). Keep this host-local file when refreshing rollout files. The v2.0.17 helper `ALFNodeSettings.ps1` must be copied with the host scripts.
 - **Run** opens the script in its own PowerShell window, so you can read its output and answer its
   questions. The console marks the step done when the window closes.
 - **Status** is read from the host itself (is `F:` there, is Hyper-V installed, does the VM exist),
@@ -264,8 +266,8 @@ without typing it. Leave it empty and script 12 asks for it on each node instead
 
 ## Things to know
 
-- **Hyper-V Time Synchronization is disabled for all four nested VMs** (ContosoDC1, the admin station and both selected Azure Local nodes) by creation scripts 04dc/04adm/10. Guest Service Interface remains enabled for file delivery. Windows Time inside the guest retains its configured source; domain members normally follow the domain hierarchy (ContosoDC1 in this single-DC lab). The lab does not set manual NTP peers or change Windows Time policy. The DC's upstream source still needs to be valid/reachable; disabling integration does not by itself configure upstream NTP. Check `w32tm /query /source` in each guest after startup/domain join. Time-zone selection is a separate optional display setting.
-- **Existing VMs:** after refreshing host rollout files, host step **8** (script 05) disables Time Synchronization for DC/admin and step **10** (script 11) disables it for the applied node pair, without recreating VMs or running guest storage cleanup. To change only this integration setting, untick **Time synchronization** in Hyper-V Manager for each of those four VMs; leave other integration services unchanged. Do not rerun creation scripts to recreate the DC/admin.
+- **Hyper-V Time Synchronization is disabled for all nested VMs** (ContosoDC1, the admin station and every selected Azure Local node) by creation scripts 04dc/04adm/10. Guest Service Interface remains enabled for file delivery. Windows Time inside the guest retains its configured source; domain members normally follow the domain hierarchy (ContosoDC1 in this single-DC lab). The lab does not set manual NTP peers or change Windows Time policy. The DC's upstream source still needs to be valid/reachable; disabling integration does not by itself configure upstream NTP. Check `w32tm /query /source` in each guest after startup/domain join. Time-zone selection is a separate optional display setting.
+- **Existing VMs:** after refreshing host rollout files, host step **8** (script 05) disables Time Synchronization for DC/admin and step **10** (script 11) disables it for the applied nodes, without recreating VMs or running guest storage cleanup. To change only this integration setting, untick **Time synchronization** in Hyper-V Manager for each of those VMs; leave other integration services unchanged. Do not rerun creation scripts to recreate the DC/admin.
 
 - **Azure Policy in customer tenants.** Inherited policies can act on the nodes as soon as they
   register with Arc - the symptom is nodes showing *Connected* while deployment operations time
@@ -280,4 +282,4 @@ without typing it. Leave it empty and script 12 asks for it on each node instead
 
 ## Version
 
-**2.1.0** - see `CHANGELOG.md`. The version is shown at the top of the Lab Builder window, in `VERSION.txt`, in the zip file name and in the header of every script (`# Version: ALF Lab Builder x.y.z`), so a single file copied in on its own can be identified. **Roll out scripts** warns about any script from a different version. It goes up with every change.
+**2.1.1** - see `CHANGELOG.md`. The version is shown at the top of the Lab Builder window, in `VERSION.txt`, in the zip file name and in the header of every script (`# Version: ALF Lab Builder x.y.z`), so a single file copied in on its own can be identified. **Roll out scripts** warns about any script from a different version. It goes up with every change.

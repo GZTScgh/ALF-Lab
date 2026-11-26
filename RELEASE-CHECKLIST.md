@@ -1,4 +1,4 @@
-# ALF Lab Builder v2.1.0 - release checklist
+# ALF Lab Builder v2.1.1 - release checklist
 
 - [ ] Planning Console group 4: **Azure Local image release** lists 2601 to 2611 (default 2608); rollout fills scripts 01/10 and the Host Console with `C:\ISO\AzureLocal-<release>.iso` and `https://aka.ms/hcireleaseimage/<release>`. An ISO already in `C:\ISO` for the same release is reused; an unpublished release (2611) fails the download visibly (tiny-file check) instead of creating nodes from a bad ISO.
 - [ ] **Target solution version (optional)**: blank leaves script 14's pick list; a four-part value (for example `12.2610.1004.50`) reaches script 14 after rollout; a malformed value fails **Check values**. The Node Console override still wins on that node.
@@ -30,8 +30,10 @@
 - [ ] Node IP range first/last and cluster resources range first/last appear together under 6. Nodes, not 3. Lab network. Preserve their values, placeholders, validation rules and network checks after reload/save/rollout.
 
 - [ ] Section 2 defaults: SuperHost 96 GB/20 available vCPUs, 16-GB host RAM reserve; DC 2/2 GB, Admin 2/4 GB, each node 12/36 GB. All fields persist and minimums are enforced.
+- [ ] SuperHost available vCPUs 12 to 19 (try 16) passes with an amber *below the recommended 20* warning in the Planning Console, script 00 and host scripts 04dc/04adm/10; 11 is INVALID LAB SIZING; 20 shows no below-recommended warning. An older plan's "(min 20)" label becomes "(min 12, 20 recommended)" and keeps its value.
+- [ ] Load a `LabValues.json` whose Template folder is a 2.1.0 folder (Rollout folder = its `Rollout`): the log notes the switch, both folder boxes show this Planning Console's folder and `Rollout`, and the rollout is 2.1.1 (16 vCPUs warns, not blocks). A 2.1.0 file placed in the template folder blocks rollout with its name and version; nothing is written.
 - [ ] Default summary is 78/80 GB guest budget, 18 GB host headroom, 28 shared guest vCPUs/20 host vCPUs; CPU sharing warns and does not block. RAM over-allocation, a guest exceeding host CPUs or known SKU-memory mismatch blocks command copy/rollout.
-- [ ] Choose a larger matching SKU and increase allocations; both node names (including overrides) receive identical selected sizes. New creation consumes the saved values; existing VMs are not automatically resized.
+- [ ] Choose a larger matching SKU and increase allocations; every applied node name (including overrides) receives identical selected sizes. New creation consumes the saved values; existing VMs are not automatically resized.
 - [ ] Actual undersized SuperHost fails before guest disks/VMs are created; normal nominal-vs-OS RAM accounting is tolerated. Script 00 checks the budget before Azure resource creation.
 - [ ] Run tests\GuestSizing.Tests.ps1 and tests\HostSizing.Tests.ps1 in an approved STA PowerShell session; preserve existing student values when loading older plans.
 
@@ -54,7 +56,7 @@
 
 - [ ] Section 2 accepts 20 / 48 max without refreshing Azure and with missing/unlisted reduced-count metadata; show warnings and retain --v-cpus-available 20 through copy and rollout.
 
-- [ ] All four nested VMs have Hyper-V Time Synchronization disabled after creation; Guest Service Interface remains enabled. Host steps 8/10 repair the same setting on existing VMs without recreation.
+- [ ] All nested VMs (DC, admin station and every applied node) have Hyper-V Time Synchronization disabled after creation; Guest Service Interface remains enabled. Host steps 8/10 repair the same setting on existing VMs without recreation.
 - [ ] Check w32tm /query /source in unjoined guests and after domain join; confirm the domain hierarchy and the DC's valid upstream source. No guest NTP peers or Windows Time policies are overwritten.
 
 - [ ] Host Console step 1 and each guest role: any unavailable time-zone ID falls back to Eastern Standard Time. Missing Eastern, time-zone lookup failure and Set-TimeZone failure only warn and continue. Verify valid/already-selected zones and blank values; actual disk/folder errors must still fail. Run tests\GuestTimeZone.Tests.ps1 in an approved PowerShell session without running destructive node configuration solely to test display time.
@@ -67,10 +69,13 @@
 
 - [ ] Step 10 displays the applied VM destinations and actual console filenames. Verify successful guest hashes and per-VM summary; missing/stopped VM, wrong credentials, adapter error or failed/missing guest copy must leave the step incomplete. Generated host scripts alone cannot mark it done.
 - [ ] Recreated VMs or changed source scripts invalidate delivery receipts. After deleting a guest file, rerun step 10 to detect/restore it; status explicitly shows the last verification time.
-- [ ] Host Console step 9: apply Node3/Node4 names, restart the console, and verify the same pair appears in creation, preparation and per-node configure scripts. Original plan/IP order remain unchanged.
-- [ ] Reject duplicate/invalid/reserved names; block both node steps with unapplied edits and prevent changing names during a running host step.
-- [ ] A previous pair's run history must not complete the newly selected pair; existing VMs must not be renamed or deleted.
-- [ ] Copy `ALFNodeSettings.ps1` with all v2.1.0 host files; retain the host-local `ALFHostConsole-Nodes.json` during refresh.
+- [ ] Host Console step 9: apply Node3/Node4 names, restart the console, and verify the same names appear in creation, preparation and per-node configure scripts. Original plan/IP order remain unchanged.
+- [ ] **[untested]** Planning Console: **Number of Azure Local nodes** offers 2-16 (default 2) just above the node vCPU/RAM rows. Set it to 3 on the default 96 GB host: the summary shows **INVALID LAB SIZING** naming 3 nodes, the reserve row shows **Invalid sizing** and copy/rollout is blocked; with **Custom (on-premises)** and 130 GB SuperHost RAM it passes and the summary reads *3 nodes: 114 / 114 GB guest RAM...*. Load a 2.1.0 plan: the row is added (value 2) before the node vCPUs and no other value changes. With the node IP range narrowed below the count, **Check values** flags it.
+- [ ] **[untested on hosts]** With Number of Azure Local nodes = 3 and no saved step 9 selection, Host Console step 9 shows 3 name boxes (the third continues the numbering) and scripts 10/11 target 3 nodes; after applying a step 9 selection, that selection wins.
+- [ ] **[untested on hosts]** Host Console step 9: **Number of nodes** offers 2-16 (default 2, or the saved count after restart). Raising it adds pre-filled, distinct name boxes; Apply with 3 nodes on a host large enough, then verify script 10 creates 3 VMs, script 11 assigns the first three node IPs in order and step 10 delivers to all three. On the default 96 GB host, script 10 must stop before creating any VM. With the default `.51 - .59` range, Apply must refuse 10 or more nodes.
+- [ ] Reject duplicate/invalid/reserved names; block both node steps with unapplied edits and prevent changing names or the node count during a running host step.
+- [ ] A previous selection's run history must not complete the newly selected nodes; existing VMs must not be renamed or deleted.
+- [ ] Copy `ALFNodeSettings.ps1` with all v2.1.1 host files; retain the host-local `ALFHostConsole-Nodes.json` during refresh.
 
 Complete these before publishing. Items marked **[untested]** were changed for the release
 and haven't been run end to end yet.
@@ -85,13 +90,13 @@ and haven't been run end to end yet.
 - [ ] Section 2: **Azure CLI - create host VM** is immediately after **Azure VM name**; double-click copies a PowerShell-compatible command with the plan's subscription, host RG, VM name and administrator account
 - [ ] Applying a student identifier updates the VM command; missing values show **Fill values**. VM region stays **southcentralus**, size **Standard_D48als_v7**; no password is embedded and **--nsg-rule NONE** keeps inbound RDP closed
 - [ ] **[untested]** Deploy the new VM command only after verifying regional SKU availability, quota and nested virtualization; add approved restricted access and shutdown configuration separately. Do not also run script 00 to create the same VM
-- [ ] Cluster identifier defaults to **2100** (version 2.1.0); typing alone leaves all numbered names unchanged and shows **Not applied**
+- [ ] Cluster identifier defaults to **2101** (version 2.1.1); typing alone leaves all numbered names unchanged and shows **Not applied**
 - [ ] **Apply identifier** updates all eleven naming fields and CLI/command previews; no unrelated values change
 - [ ] Save/reload and Export for sharing retain identifier and naming templates; leading zeros (e.g. **0042**) are preserved
 - [ ] Invalid/partial/non-ASCII identifiers and unapplied changes block save, command copy/file generation, Azure preparation and rollout; close-and-save stays open
 - [ ] Regenerated rollout uses the applied identifier everywhere; no stale 2105/1024 lab names remain (1024 GB disks are unchanged)
 - [ ] Older plans load without retargeting names; applying a new identifier preserves prefixes/suffixes and nested OU parents
-- [ ] **[untested]** Fresh PC: unblock the files, launch `Launch-ALFLabBuilder.cmd`; the version badge at the top shows *Version 2.1.0*
+- [ ] **[untested]** Fresh PC: unblock the files, launch `Launch-ALFLabBuilder.cmd`; the version badge at the top shows *Version 2.1.1*
 - [ ] **[untested]** Window titles and headings read `1. ALF Lab Builder - Planning Console` and `2. ALF Lab Builder - Host Console`
 - [ ] Tenant ID and Subscription ID show **Missing** until filled in
 - [ ] **Check values** - everything OK once the IDs are entered
@@ -122,7 +127,7 @@ and haven't been run end to end yet.
       `Select-String -Path .\* -Pattern '<your tenant id>','<your subscription id>','<your user name>'`
 - [ ] No `Rollout` folder, `LabValues.shareable.json`, logs or CSV reports in the package
 - [ ] `LabValues.json` Settings folders are empty and the second local admin password is empty
-- [ ] **[pending]** Update the source guide `ALF-Lab-Build-Guide-v1.0.24.docx` with the new identifier workflow, then publish `ALF-Lab-Build-Guide-v2.1.0.docx` with matching title page, page header and Appendix D. Saved plans retain their chosen four-digit identifier; missing identifiers default to 2100.
+- [ ] **[pending]** Update the source guide `ALF-Lab-Build-Guide-v1.0.24.docx` with the new identifier workflow, then publish `ALF-Lab-Build-Guide-v2.1.1.docx` with matching title page, page header and Appendix D. Saved plans retain their chosen four-digit identifier; missing identifiers default to 2101.
 
 ## Version
 - [ ] Version is the same everywhere: Lab Builder (`$ALFVersion`), `LabValues.json`, `VERSION.txt`, README, CHANGELOG, zip and folder name

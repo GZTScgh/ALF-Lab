@@ -34,12 +34,31 @@ try {
     Assert ((@(Get-ALFNodeNames $NodeSettingsFile $planned) -join '|') -eq ($planned -join '|')) 'Missing settings must preserve the plan.'
     Save-ALFNodeNames $NodeSettingsFile $selected
     Assert ((@(Get-ALFNodeNames $NodeSettingsFile $planned) -join '|') -eq ($selected -join '|')) 'Saved selection must survive reload.'
-    foreach ($invalid in @(@('', 'Node4'), @('Node3', 'node3'), @('123', 'Node4'), @('Node_3', 'Node4'), @('-Node3', 'Node4'), @('ABCDEFGHIJKLMNOP', 'Node4'), @('Node3'))) {
+    $seventeen = @(1..17 | ForEach-Object { "Node$_" })
+    foreach ($invalid in @(@('', 'Node4'), @('Node3', 'node3'), @('123', 'Node4'), @('Node_3', 'Node4'), @('-Node3', 'Node4'), @('ABCDEFGHIJKLMNOP', 'Node4'), @('Node3'), $seventeen, @('Node3', 'Node4', 'NODE3'))) {
         Assert-Throws { Save-ALFNodeNames $NodeSettingsFile $invalid } 'Reject invalid node names.'
     }
     Assert ((@(Get-ALFNodeNames $NodeSettingsFile $planned) -join '|') -eq ($selected -join '|')) 'Invalid saves must preserve previous selection.'
+    foreach ($valid in @(@('Node3', 'Node4', 'Node5'), @($seventeen[0..15]))) {
+        Save-ALFNodeNames $NodeSettingsFile $valid
+        Assert ((@(Get-ALFNodeNames $NodeSettingsFile $planned) -join '|') -eq ($valid -join '|')) "A $($valid.Count)-node selection must save and reload."
+    }
+    Assert ((Get-ALFNextNodeName @('AzL2001Node1', 'AzL2001Node2')) -eq 'AzL2001Node3') 'Added nodes continue the numbering.'
+    Assert ((Get-ALFNextNodeName @('Node3', 'Node4', 'Node5')) -eq 'Node6' -and (Get-ALFNextNodeName @('Node5', 'Node6', 'Node3')) -eq 'Node4') 'Next name skips names already used.'
+    Assert ((Get-ALFNextNodeName @('Node09')) -eq 'Node10') 'Next name keeps zero padding.'
+    $longNext = Get-ALFNextNodeName @('ABCDEFGHIJKLMN9')
+    Assert ($longNext.Length -le 15 -and $longNext -eq 'ABCDEFGHIJKLM10') 'Next name stays within 15 characters.'
+    Assert ((Join-ALFNodeNames @('A', 'B')) -eq 'A and B' -and (Join-ALFNodeNames @('A', 'B', 'C')) -eq 'A, B and C') 'Node lists read naturally.'
+    $plannedThree = @(Get-ALFPlannedNodeNames $planned '3')
+    Assert ($plannedThree.Count -eq 3 -and $plannedThree[2] -eq 'AzL2001Node3' -and (@(Get-ALFPlannedNodeNames $planned '2') -join '|') -eq ($planned -join '|')) 'The planned node count adds suggested names after NodeName2.'
+    $plannedSixteen = @(Get-ALFPlannedNodeNames $planned '16')
+    Assert ($plannedSixteen.Count -eq 16 -and $plannedSixteen[15] -eq 'AzL2001Node16') 'Sixteen planned nodes get valid names.'
+    foreach ($badCount in '1', '17', 'x', '') {
+        Assert-Throws { Get-ALFPlannedNodeNames $planned $badCount } "A planned node count of '$badCount' must be rejected."
+    }
+    Assert ((@(Get-ALFPlannedNodeNames @('{{NodeName1}}', '{{NodeName2}}') '{{NodeCount}}') -join '|') -eq '{{NodeName1}}|{{NodeName2}}') 'Unrolled templates keep their placeholders.'
     Save-ALFNodeNames $NodeSettingsFile $planned
-    Assert ((@(Get-ALFNodeNames $NodeSettingsFile $selected) -join '|') -eq ($planned -join '|')) 'Replacing settings must persist the new pair.'
+    Assert ((@(Get-ALFNodeNames $NodeSettingsFile $selected) -join '|') -eq ($planned -join '|')) 'Replacing settings must persist the new selection.'
     Set-Content -LiteralPath $NodeSettingsFile -Value '{broken'
     Assert-Throws { Get-ALFNodeNames $NodeSettingsFile $planned } 'Corrupt selection must fail closed.'
     Save-ALFNodeNames $NodeSettingsFile $selected
@@ -64,8 +83,11 @@ try {
     $script:Refreshes = 0
     Update-Buttons
     Assert ($script:Rows.Nodes.nodeOptions.Visibility -eq 'Visible' -and $script:Rows.Prepare.nodeOptions.Visibility -eq 'Collapsed') 'Only step 9 exposes node fields.'
-    $script:Rows.Nodes.nodeName1.Text = $selected[0]
-    $script:Rows.Nodes.nodeName2.Text = $selected[1]
+    $nodeRow = $script:Rows.Nodes
+    Assert ($nodeRow.nodeCount.Items.Count -eq 15 -and [int]$nodeRow.nodeCount.SelectedItem -eq 2 -and $nodeRow.nodeBoxes.Count -eq 2 -and $nodeRow.nodeNamePanel.Children.Count -eq 2) 'Step 9 offers 2-16 nodes and starts with the applied pair.'
+    Assert ($nodeRow.nodeBoxes[0].Text -eq $planned[0] -and $nodeRow.nodeBoxes[1].Text -eq $planned[1] -and $nodeRow.run.IsEnabled) 'Applied names fill the boxes without pending edits.'
+    $nodeRow.nodeBoxes[0].Text = $selected[0]
+    $nodeRow.nodeBoxes[1].Text = $selected[1]
     Assert (-not $script:Rows.Nodes.run.IsEnabled -and -not $script:Rows.Prepare.run.IsEnabled) 'Unapplied edits block both node steps.'
     Start-LabScript (Get-Task 'Prepare')
     Assert ($script:LastLog -match 'Apply node names') 'Direct Run path must also guard unapplied edits.'
@@ -78,16 +100,55 @@ try {
     foreach ($reserved in @($DCName, $AdminStationName, $env:COMPUTERNAME)) {
         Assert-Throws { Set-HostNodeNames @($reserved, 'Node4') } 'Reserved VM/host names must be rejected.'
     }
+    $clickApply = { $nodeRow.applyNodes.RaiseEvent([Windows.RoutedEventArgs]::new([Windows.Controls.Button]::ClickEvent)) }
+    $nodeRow.nodeCount.SelectedIndex = 1
+    Assert ($nodeRow.nodeBoxes.Count -eq 3 -and $nodeRow.nodeNamePanel.Children.Count -eq 3 -and $nodeRow.nodeBoxes[2].Text -eq 'AzL2001Node5') 'A third box is added with the next node name.'
+    Assert (-not $nodeRow.run.IsEnabled -and -not $script:Rows.Prepare.run.IsEnabled -and $nodeRow.nodeSelection.Text -match 'Pending') 'A changed node count blocks both node steps until applied.'
+    $NodeIPStart = '192.168.44.51'; $NodeIPEnd = '192.168.44.52'
+    & $clickApply
+    Assert ($script:LastLog -match 'not applied' -and $script:LastLog -match 'holds only 2' -and $NodeNames.Count -eq 2) 'Apply refuses more nodes than the planned IP range holds.'
+    $NodeIPEnd = '192.168.44.59'
+    & $clickApply
+    $three = @('AzL2001Node3', 'AzL2001Node4', 'AzL2001Node5')
+    Assert (($NodeNames -join '|') -eq ($three -join '|') -and ((@(Get-ALFNodeNames $NodeSettingsFile $planned)) -join '|') -eq ($three -join '|')) 'Apply saves a three-node selection.'
+    Assert ($nodeRow.run.IsEnabled -and $nodeRow.desc.Text -match 'AzL2001Node3, AzL2001Node4 and AzL2001Node5' -and $script:Rows.Prepare.desc.Text -match 'AzL2001Node3, AzL2001Node4 and AzL2001Node5') 'Descriptions list all applied nodes.'
+    Assert ($nodeRow.nodeSelection.Text -match '\(3 nodes\)' -and $script:LastLog -match 'Applied 3 node names') 'Status and log show the node count.'
+    Remove-Variable NodeIPStart, NodeIPEnd
+    $nodeRow.nodeCount.SelectedIndex = 14
+    $sixteen = @($nodeRow.nodeBoxes | ForEach-Object { $_.Text })
+    Assert ($sixteen.Count -eq 16 -and @($sixteen | Select-Object -Unique).Count -eq 16 -and $sixteen[15] -eq 'AzL2001Node18') 'Sixteen boxes get distinct suggested names.'
+    Test-ALFNodeNames $sixteen
+    Assert $true 'Suggested names for sixteen nodes are valid.'
+    $nodeRow.nodeCount.SelectedIndex = 0
+    Assert ($nodeRow.nodeBoxes.Count -eq 2 -and $nodeRow.nodeNamePanel.Children.Count -eq 2 -and $nodeRow.nodeBoxes[1].Text -eq 'AzL2001Node4' -and -not $nodeRow.run.IsEnabled) 'Lowering the count removes boxes and leaves a pending edit.'
+    & $clickApply
+    Assert (($NodeNames -join '|') -eq ($selected -join '|') -and $nodeRow.run.IsEnabled -and $nodeRow.desc.Text -match 'AzL2001Node3 and AzL2001Node4') 'Apply returns to a two-node selection.'
     $script:Running = @{ Task = (Get-Task 'Nodes') }
     Update-Buttons
-    Assert (-not $script:Rows.Nodes.applyNodes.IsEnabled -and -not $script:Rows.Nodes.nodeName1.IsEnabled) 'Running steps lock node selection.'
+    Assert (-not $nodeRow.applyNodes.IsEnabled -and -not $nodeRow.nodeBoxes[0].IsEnabled -and -not $nodeRow.nodeCount.IsEnabled) 'Running steps lock node selection.'
     Assert-Throws { Set-HostNodeNames $planned } 'Apply must reject changes during a running step.'
     $script:Running = $null
 
     # Fill the templates from the starter plan (Rollout\ is local-only), then run only their node-name/IP setup assignments.
     $planValues = @{}
     (Get-Content -LiteralPath (Join-Path $root 'LabValues.example.json') -Raw | ConvertFrom-Json).Values |
-        Where-Object Key -in 'NodeName1', 'NodeName2', 'NodeIPStart', 'NodeIPEnd' | ForEach-Object { $planValues[$_.Key] = [string]$_.Value }
+        Where-Object Key -in 'NodeName1', 'NodeName2', 'NodeIPStart', 'NodeIPEnd', 'NodeCount' | ForEach-Object { $planValues[$_.Key] = [string]$_.Value }
+    Assert ($planValues.NodeCount -eq '2') 'The starter plan budgets two nodes.'
+    # With a planned count of 3 and no saved step 9 selection, every entry point starts with three nodes.
+    $threePlan = $planValues.Clone(); $threePlan.NodeCount = '3'
+    $noSelection = Join-Path $fixtureRoot 'no-selection'
+    $plannedSetup = @{ 'ALFHostConsole.ps1' = '$PlannedNodeNames', '$NodeSettingsFile', '$NodeNames'; '10.Host-CreateNodeVMs.ps1' = '$NodeNameList'; '11.Host-PrepareNodes.ps1' = '$NodeNames' }
+    foreach ($file in $plannedSetup.Keys) {
+        $content = Get-Content -LiteralPath (Join-Path $root $file) -Raw
+        foreach ($key in $threePlan.Keys) { $content = $content.Replace('{{' + $key + '}}', $threePlan[$key]) }
+        $fileTokens = $null; $fileErrors = $null
+        $fileAst = [Management.Automation.Language.Parser]::ParseInput($content, [ref]$fileTokens, [ref]$fileErrors)
+        $variables = $plannedSetup[$file]
+        $code = (@($fileAst.EndBlock.Statements | Where-Object { $_ -is [Management.Automation.Language.AssignmentStatementAst] -and $_.Left.Extent.Text -in $variables }) | ForEach-Object { $_.Extent.Text }) -join "`n"
+        $resultVariable = @($variables)[-1].TrimStart('$')
+        $names = & { . ([scriptblock]::Create($code.Replace('$PSScriptRoot', '$noSelection'))); Get-Variable -Name $resultVariable -ValueOnly }
+        Assert (@($names).Count -eq 3 -and @($names)[2] -eq ($planValues.NodeName2 -replace '2$', '3')) "$file must start with the planned Number of Azure Local nodes."
+    }
     foreach ($file in '10.Host-CreateNodeVMs.ps1', '11.Host-PrepareNodes.ps1') {
         $content = Get-Content -LiteralPath (Join-Path $root $file) -Raw
         foreach ($key in $planValues.Keys) { $content = $content.Replace('{{' + $key + '}}', $planValues[$key]) }
@@ -106,6 +167,14 @@ try {
     $nodesCode = $prepareAst.EndBlock.Statements | Where-Object { $_ -is [Management.Automation.Language.AssignmentStatementAst] -and $_.Left.Extent.Text -eq '$Nodes' } | Select-Object -First 1
     . ([scriptblock]::Create($nodesCode.Extent.Text))
     Assert ($Nodes[0].Name -eq $selected[0] -and $Nodes[1].Name -eq $selected[1] -and $Nodes[0].IP -eq $NodeIPStart) 'Preparation must retain first/second IP ordering.'
+    $savedNodeNames = $NodeNames
+    $NodeNames = @('Node3', 'Node4', 'Node5')
+    . ([scriptblock]::Create($nodesCode.Extent.Text))
+    $ipPrefix = $NodeIPStart.Substring(0, $NodeIPStart.LastIndexOf('.') + 1)
+    $firstLast = [int]$NodeIPStart.Split('.')[3]
+    Assert ($Nodes.Count -eq 3 -and $Nodes[2].Name -eq 'Node5' -and $Nodes[2].IP -eq ($ipPrefix + ($firstLast + 2))) 'A third node gets the next address in the range.'
+    $NodeNames = $savedNodeNames
+    . ([scriptblock]::Create($nodesCode.Extent.Text))
     $Template = Join-Path $fixtureRoot 'template.ps1'
     Set-Content -LiteralPath $Template -Value 'Name=__NODENAME__; IP=__NODEIP__'
     $generateCode = $prepareAst.FindAll({ param($n) $n -is [Management.Automation.Language.PipelineAst] -and $n.Extent.Text.StartsWith('(Get-Content $Template -Raw).Replace') }, $true) | Select-Object -First 1

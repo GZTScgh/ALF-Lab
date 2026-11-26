@@ -140,4 +140,15 @@ Initialize-ALFHostSizingPlan $plan
 $sizeRow = $plan.Values | Where-Object Key -eq 'HostVMSize'
 Assert ($sizeRow.Value -eq $customSize -and $sizeRow.Value -match $sizeRow.Pattern) 'Save/reload migration retains a valid custom selection.'
 Assert (($plan.Values | Where-Object Group -eq '2. Host' | Select-Object -First 1).Key -eq 'HostVMSize') 'The size choice appears first in the host section after migration and reload.'
+$exampleCpu = @((Get-Content -LiteralPath (Join-Path (Split-Path $PSScriptRoot -Parent) 'LabValues.example.json') -Raw | ConvertFrom-Json).Values) | Where-Object Key -eq 'HostAvailableVcpus'
+$oldCpu = [pscustomobject]@{ Key = 'HostAvailableVcpus'; Group = '2. Host'; Value = '16'
+    Label = $exampleCpu.Label.Replace('(min 12, 20 recommended)', '(min 20)')
+    Description = $exampleCpu.Description.Replace('Lab minimum is 12 available vCPUs; 20 or more is recommended. 12 to 19 is allowed for testing with a performance warning.', 'Lab minimum is 20 available vCPUs.')
+    Hint = $exampleCpu.Hint.Replace('Lab minimum is 12 available vCPUs; 20 or more is recommended. 12 to 19 is allowed for testing with a performance warning.', 'Lab minimum is 20 available vCPUs.') }
+$cpuPlan = [pscustomobject]@{ Values = @(
+    [pscustomobject]@{ Key = 'HostVMName'; Group = '2. Host'; Value = 'LABHOST2778-vm' },
+    [pscustomobject]@{ Key = 'HostVMSize'; Group = '2. Host'; Value = $sku.name; Pattern = '' }, $oldCpu) }
+Initialize-ALFHostSizingPlan $cpuPlan
+Initialize-ALFHostSizingPlan $cpuPlan
+Assert ($oldCpu.Label -ceq $exampleCpu.Label -and $oldCpu.Description -ceq $exampleCpu.Description -and $oldCpu.Hint -ceq $exampleCpu.Hint -and $oldCpu.Value -eq '16') 'Plans saved with the old 20-vCPU minimum get the 12-minimum wording of new plans and keep their value.'
 Write-Output "PASS: $script:Passed host-sizing checks; mocked Azure metadata, no provisioning."

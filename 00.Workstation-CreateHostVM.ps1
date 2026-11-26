@@ -1,5 +1,5 @@
 ﻿##############################################################
-# Version: ALF Lab Builder 2.1.0   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.1.1   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # 00.Workstation-CreateHostVM.ps1
 # Creates the Azure VM that hosts the whole nested lab
 #
@@ -24,7 +24,7 @@ $Location       = "{{ArcRegion}}"        #same region as the cluster - set in th
 #Host VM
 $VMName       = "{{HostVMName}}"     #max 15 characters (Windows computer name limit) - set in the Lab Builder
 $VMSize       = "{{HostVMSize}}"       #selected in Planning Console section 2
-$AvailableVcpus = "{{HostAvailableVcpus}}" #default/minimum lab request: 20; validate against this region's SKU metadata
+$AvailableVcpus = "{{HostAvailableVcpus}}" #default/recommended 20, minimum 12 (12-19 warns); validate against this region's SKU metadata
 . (Join-Path $PSScriptRoot 'ALFHostSizing.ps1')
 . (Join-Path $PSScriptRoot 'ALFGuestSizing.ps1')
 $Image        = "MicrosoftWindowsServer:WindowsServer:2025-datacenter-g2:latest"

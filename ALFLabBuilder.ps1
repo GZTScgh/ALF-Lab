@@ -1,5 +1,5 @@
 ﻿##############################################################
-# Version: ALF Lab Builder 2.1.0   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
+# Version: ALF Lab Builder 2.1.1   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # ALFLabBuilder.ps1   -   1. ALF Lab Builder - Planning Console
 # A simple window for keeping track of every value the Azure Local lab needs,
 # and "rolling out" the lab scripts with those values filled in.
@@ -23,7 +23,7 @@ param(
     [string]$ValuesFile = (Join-Path $PSScriptRoot "LabValues.json")
 )
 
-$ALFVersion = "2.1.0"   #increment on EVERY change (also LabValues.example.json, VERSION.txt, CHANGELOG.md)
+$ALFVersion = "2.1.1"   #increment on EVERY change (also LabValues.example.json, VERSION.txt, CHANGELOG.md)
 . (Join-Path $PSScriptRoot 'ALFHostSizing.ps1')
 . (Join-Path $PSScriptRoot 'ALFGuestSizing.ps1')
 $script:HostSkus = @()
@@ -203,8 +203,15 @@ public class LabValue : INotifyPropertyChanged {
                     <TextBlock.Style><Style TargetType="TextBlock"><Style.Triggers>
                       <DataTrigger Binding="{Binding Key}" Value="HostVMSize"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
                       <DataTrigger Binding="{Binding Key}" Value="AzureLocalImageRelease"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
+                      <DataTrigger Binding="{Binding Key}" Value="NodeCount"><Setter Property="Visibility" Value="Collapsed"/></DataTrigger>
                     </Style.Triggers></Style></TextBlock.Style>
                   </TextBlock>
+                  <ComboBox Name="cmbNodeCount" ItemsSource="{Binding Choices}" Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}" IsEditable="True" IsTextSearchEnabled="True"
+                            ToolTip="Number of Azure Local nodes (2-16). Node RAM and vCPUs are budgeted once per node on the SuperHost.">
+                    <ComboBox.Style><Style TargetType="ComboBox"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers>
+                      <DataTrigger Binding="{Binding Key}" Value="NodeCount"><Setter Property="Visibility" Value="Visible"/></DataTrigger>
+                    </Style.Triggers></Style></ComboBox.Style>
+                  </ComboBox>
                   <ComboBox Name="cmbImageRelease" ItemsSource="{Binding Choices}" Text="{Binding Value, UpdateSourceTrigger=PropertyChanged}" IsEditable="True" IsTextSearchEnabled="True"
                             ToolTip="Azure Local release to download and install the nodes from (YYMM). Pick from the list or type a newer one.">
                     <ComboBox.Style><Style TargetType="ComboBox"><Setter Property="Visibility" Value="Collapsed"/><Style.Triggers>
@@ -454,6 +461,55 @@ function Get-ALFDomainDN([string]$DomainFqdn) {
     return (($DomainFqdn.Split('.') | ForEach-Object { "DC=$_" }) -join ',')
 }
 
+#Scripts, command files and host/guest console launchers are rolled out; the Planning Console itself is not
+function Get-ALFRolloutTemplateFiles([string]$Folder) {
+    return @(Get-ChildItem -LiteralPath $Folder -File | Where-Object {
+        ($_.Extension -in ".ps1", ".txt" -and $_.Name -ne "ALFLabBuilder.ps1") -or $_.Name -in @("Launch-ALFHostConsole.cmd", "Launch-ALFDCConsole.cmd", "Launch-ALFAdminConsole.cmd", "Launch-ALFNodeConsole.cmd")
+    } | Sort-Object Name)
+}
+
+#Every lab file carries a version stamp in its header; '' means the file has none
+function Get-ALFTemplateVersion([string]$Text) {
+    if ($Text -match '(?m)^(#|rem) Version: ALF Lab Builder (\S+)') { return $Matches[2] }
+    return ''
+}
+
+#Template files stamped with a different release than this Planning Console
+function Get-ALFStaleTemplateFiles([string]$Folder, [string]$Version) {
+    $stale = @()
+    if (-not $Folder -or -not (Test-Path -LiteralPath $Folder -PathType Container)) { return $stale }
+    foreach ($f in Get-ALFRolloutTemplateFiles $Folder) {
+        $stamp = Get-ALFTemplateVersion (Get-Content -LiteralPath $f.FullName -Raw)
+        if ($stamp -and $stamp -ne $Version) { $stale += [pscustomobject]@{ Name = $f.Name; Version = $stamp } }
+    }
+    return $stale
+}
+
+function Get-ALFFullFolderPath([string]$Folder) {
+    try { return [IO.Path]::GetFullPath($Folder).TrimEnd('\') } catch { return $Folder.TrimEnd('\') }
+}
+
+#Folders saved in LabValues.json. A saved template folder holding another release's lab files (for example an
+#older copy of the Lab Builder) is replaced by this Planning Console's folder, so rollout uses this release's scripts.
+function Resolve-ALFRolloutFolders([string]$TemplateFolder, [string]$RolloutFolder, [string]$BuilderFolder, [string]$Version) {
+    $result = [pscustomobject]@{
+        TemplateFolder = if ($TemplateFolder) { $TemplateFolder } else { $BuilderFolder }
+        RolloutFolder  = if ($RolloutFolder) { $RolloutFolder } else { Join-Path $BuilderFolder "Rollout" }
+        Note           = ''
+    }
+    if (-not $TemplateFolder -or (Get-ALFFullFolderPath $TemplateFolder) -eq (Get-ALFFullFolderPath $BuilderFolder)) { return $result }
+    $stale = @(Get-ALFStaleTemplateFiles $TemplateFolder $Version)
+    if (-not $stale.Count) { return $result }
+    $result.TemplateFolder = $BuilderFolder
+    #A rollout folder beside the old template folder is that copy's default - move it beside this one too
+    if (-not $RolloutFolder -or (Get-ALFFullFolderPath $RolloutFolder) -eq (Get-ALFFullFolderPath (Join-Path $TemplateFolder "Rollout"))) {
+        $result.RolloutFolder = Join-Path $BuilderFolder "Rollout"
+    }
+    $result.Note = "Note: the saved template folder $TemplateFolder has version $((@($stale.Version) | Sort-Object -Unique) -join ', ') scripts; this Planning Console is version $Version. " +
+        "Using this Planning Console's folder instead: $BuilderFolder (rollout folder: $($result.RolloutFolder)). Save or roll out to keep these folders."
+    return $result
+}
+
 function Load-Values {
     if (-not (Test-Path $ValuesFile)) {
         [System.Windows.MessageBox]::Show("Can't find $ValuesFile", "1. ALF Lab Builder - Planning Console") | Out-Null
@@ -462,6 +518,7 @@ function Load-Values {
     $script:LabData = Get-Content $ValuesFile -Raw | ConvertFrom-Json
     Initialize-ALFHostSizingPlan $script:LabData
     Initialize-ALFGuestSizingPlan $script:LabData
+    Initialize-ALFNodeCountPlan $script:LabData
     Initialize-ALFDomainPlan $script:LabData
     Initialize-ALFImagePlan $script:LabData
     $identifier = [string]$script:LabData.ClusterIdentifier
@@ -482,6 +539,9 @@ function Load-Values {
         elseif ($o.Key -eq 'AzureLocalImageRelease') {
             foreach ($choice in Get-ALFImageReleaseChoices $o.Value) { $o.Choices.Add($choice) }
         }
+        elseif ($o.Key -eq 'NodeCount') {
+            foreach ($choice in 2..16) { $o.Choices.Add([string]$choice) }
+        }
         $o.IdentifierTemplate = $v.IdentifierTemplate
         if (-not $o.IdentifierTemplate -and $IdentifierTemplates.Contains($o.Key)) {
             #Older plans have no naming templates: retain their prefixes, suffixes and OU parent path.
@@ -494,10 +554,10 @@ function Load-Values {
     }
 
     #Folders - default to the folder this tool is in, and a "Rollout" folder beside it
-    $tpl = $script:LabData.Settings.TemplateFolder
-    $out = $script:LabData.Settings.RolloutFolder
-    $ui.txtTemplates.Text = if ($tpl) { $tpl } else { $PSScriptRoot }
-    $ui.txtRollout.Text   = if ($out) { $out } else { Join-Path $PSScriptRoot "Rollout" }
+    $folders = Resolve-ALFRolloutFolders ([string]$script:LabData.Settings.TemplateFolder) ([string]$script:LabData.Settings.RolloutFolder) $PSScriptRoot $ALFVersion
+    $ui.txtTemplates.Text = $folders.TemplateFolder
+    $ui.txtRollout.Text   = $folders.RolloutFolder
+    if ($folders.Note) { Write-Log $folders.Note }
     $script:AppliedIdentifier = $identifier
     $ui.txtIdentifier.Text = $identifier
     Set-ClusterIdentifier -Quiet | Out-Null
@@ -532,6 +592,7 @@ function Save-Values {
     $disk = Get-Content $ValuesFile -Raw | ConvertFrom-Json
     Initialize-ALFHostSizingPlan $disk
     Initialize-ALFGuestSizingPlan $disk
+    Initialize-ALFNodeCountPlan $disk
     Initialize-ALFDomainPlan $disk
     Initialize-ALFImagePlan $disk
     foreach ($v in @($disk.Values)) {
@@ -630,12 +691,18 @@ function Update-LabSizingStatus {
             $row.Hint = $field.Detail
         }
     }
+    $countRow = $items | Where-Object Key -eq 'NodeCount' | Select-Object -First 1
+    if ($countRow) {
+        $default = Get-ALFNodeCountRow ''
+        $countRow.Status = if ($countRow.Value -match $default.Pattern) { 'OK' } else { 'Check rule' }
+        $countRow.Hint = $default.Hint
+    }
     $subscription = $map.SubscriptionId
     $sku = if ($script:HostSkuContext -ceq "$subscription|southcentralus") { $script:HostSkus | Where-Object name -ceq $map.HostVMSize | Select-Object -First 1 } else { $null }
     try {
         $budget = Test-ALFLabSizing $map $sku
         $script:LabSizingWarning = $budget.Warning
-        $ui.txtSizingSummary.Text = "$($budget.GuestMemoryGB) / $($budget.AllocatableMemoryGB) GB guest RAM; $($budget.RemainingHostMemoryGB) GB remains for SuperHost ($($budget.HostReserveGB) GB reserved). $($budget.GuestVcpus) guest vCPUs / $($budget.HostVcpus) host vCPUs. $($budget.Warning)"
+        $ui.txtSizingSummary.Text = "$($budget.NodeCount) nodes: $($budget.GuestMemoryGB) / $($budget.AllocatableMemoryGB) GB guest RAM; $($budget.RemainingHostMemoryGB) GB remains for SuperHost ($($budget.HostReserveGB) GB reserved). $($budget.GuestVcpus) guest vCPUs / $($budget.HostVcpus) host vCPUs. $($budget.Warning)"
         $ui.txtSizingSummary.Foreground = [Windows.Media.BrushConverter]::new().ConvertFromString($(if ($budget.Warning) { '#8A6100' } else { '#107C10' }))
         return $true
     }
@@ -802,13 +869,14 @@ function Test-Network([switch]$Quiet) {
         $problems++
     }
 
-    #Ranges: cluster resources, node IPs and DHCP
+    #Ranges: cluster resources, node IPs (one per planned node) and DHCP
+    $byKey = @{}; foreach ($i in $items) { $byKey[$i.Key] = $i }
+    $nodeCount = if ($byKey.NodeCount -and "$($byKey.NodeCount.Value)" -match '^([2-9]|1[0-6])$') { [int]$byKey.NodeCount.Value } else { 2 }
     $ranges = @(
         @{ Name = "cluster resources range"; Start = "InfraPoolStart"; End = "InfraPoolEnd"; Min = 6 }
-        @{ Name = "node IP range";           Start = "NodeIPStart";    End = "NodeIPEnd";    Min = 2 }
+        @{ Name = "node IP range";           Start = "NodeIPStart";    End = "NodeIPEnd";    Min = $nodeCount; Why = " (one per planned node)" }
         @{ Name = "DHCP range";              Start = "DhcpStart";      End = "DhcpEnd";      Min = 1 }
     )
-    $byKey = @{}; foreach ($i in $items) { $byKey[$i.Key] = $i }
     $okRanges = @()
     foreach ($r in $ranges) {
         $s = $byKey[$r.Start]; $e = $byKey[$r.End]
@@ -819,7 +887,7 @@ function Test-Network([switch]$Quiet) {
         }
         $size = $en - $sn + 1
         if ($size -lt $r.Min) {
-            Set-Problem $e "Too small" "The $($r.Name) has $size address(es) - it needs at least $($r.Min)"; $problems++
+            Set-Problem $e "Too small" "The $($r.Name) has $size address(es) - it needs at least $($r.Min)$($r.Why)"; $problems++
         }
         $okRanges += @{ Name = $r.Name; Start = $sn; End = $en; Keys = @($r.Start, $r.End) }
     }
@@ -873,6 +941,15 @@ function Invoke-Rollout {
     $out = $ui.txtRollout.Text
     if (-not (Test-Path $tpl)) { Write-Log "Template folder not found: $tpl"; return }
     if ((Resolve-Path $tpl).Path -eq [IO.Path]::GetFullPath($out)) { Write-Log "The rollout folder can't be the same as the template folder."; return }
+    #Never mix scripts from another release into this release's rollout
+    $stale = @(Get-ALFStaleTemplateFiles $tpl $ALFVersion)
+    if ($stale.Count) {
+        $fix = if ((Get-ALFFullFolderPath $tpl) -eq (Get-ALFFullFolderPath $PSScriptRoot)) { "Replace them with the files from ALF Lab Builder $ALFVersion" }
+               else { "Set the Template folder to this Planning Console's folder ($PSScriptRoot)" }
+        Write-Log ("Rollout blocked: {0} file(s) in {1} are from version {2}, but this Planning Console is version {3} (for example {4}). {5}, then roll out again." -f
+            $stale.Count, $tpl, ((@($stale.Version) | Sort-Object -Unique) -join ', '), $ALFVersion, $stale[0].Name, $fix)
+        return
+    }
     New-Item -Path $out -ItemType Directory -Force | Out-Null
 
     #Lookup table: key -> value
@@ -884,21 +961,14 @@ function Invoke-Rollout {
         elseif (-not [string]::IsNullOrWhiteSpace($i.Value)) { $map[$i.Key] = $i.Value }
     }
 
-    #Scripts, command files and host/guest console launchers are rolled out; the Planning Console itself is not
-    $files = Get-ChildItem -Path $tpl -File | Where-Object {
-        ($_.Extension -in ".ps1", ".txt" -and $_.Name -ne "ALFLabBuilder.ps1") -or $_.Name -in @("Launch-ALFHostConsole.cmd", "Launch-ALFDCConsole.cmd", "Launch-ALFAdminConsole.cmd", "Launch-ALFNodeConsole.cmd")
-    } | Sort-Object Name
+    $files = @(Get-ALFRolloutTemplateFiles $tpl)
     $pattern = '\{\{([A-Za-z0-9_]+)\}\}'
     $unknown = @{}
     Write-Log "Rolling out $($files.Count) scripts from $tpl to $out"
 
     foreach ($f in $files) {
         $text  = Get-Content -Path $f.FullName -Raw
-        #Every lab file carries a version stamp in its header - flag any file from a different release
-        if ($text -match '(?m)^(#|rem) Version: ALF Lab Builder (\S+)') {
-            if ($Matches[2] -ne $ALFVersion) { Write-Log ("  WARNING: {0} is from version {1}; the Lab Builder is version {2}" -f $f.Name, $Matches[2], $ALFVersion) }
-        }
-        else { Write-Log ("  WARNING: {0} has no version stamp - it may be from an older release" -f $f.Name) }
+        if (-not (Get-ALFTemplateVersion $text)) { Write-Log ("  WARNING: {0} has no version stamp - it may be from an older release" -f $f.Name) }
         #Replace each {{Key}} with its value; leave unknown/empty ones as they are
         $new = [regex]::Replace($text, $pattern, {
             param($m)
@@ -1001,7 +1071,7 @@ $window.AddHandler([System.Windows.Controls.Primitives.Selector]::SelectionChang
     if ($e.OriginalSource -is [System.Windows.Controls.ComboBox] -and $e.OriginalSource.Name -eq 'cmbHostSize') {
         $window.Dispatcher.BeginInvoke([action]{ Update-HostSizingStatus | Out-Null; Update-LabSizingStatus | Out-Null; Update-Commands; Update-Details }) | Out-Null
     }
-    elseif ($e.OriginalSource -is [System.Windows.Controls.ComboBox] -and $e.OriginalSource.Name -eq 'cmbImageRelease') {
+    elseif ($e.OriginalSource -is [System.Windows.Controls.ComboBox] -and $e.OriginalSource.Name -in 'cmbImageRelease', 'cmbNodeCount') {
         $window.Dispatcher.BeginInvoke([action]{ Test-Values -Quiet | Out-Null; Update-Details }) | Out-Null
     }
 })
