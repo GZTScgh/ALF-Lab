@@ -242,6 +242,22 @@ try {
     Assert ((Get-ALFGuestTaskCheck $arcTask Node $folder).State -eq 'Attention') 'A different Azure target is not done.'
     $script:Agent.subscriptionId=$replacements['{{SubscriptionId}}']; $script:AgentThrows=$true
     Assert ((Get-ALFGuestTaskCheck $arcTask Node $folder).Detail -match 'Status check failed') 'Malformed agent output is explicitly reported.'
+
+    $forestPath = Join-Path $root '07dc.DC-CreateForest.ps1'
+    $forestAst = [Management.Automation.Language.Parser]::ParseFile($forestPath, [ref]$null, [ref]$null)
+    Assert (@($forestAst.FindAll({ param($n) $n -is [Management.Automation.Language.CommandAst] -and $n.GetCommandName() -eq 'Read-Host' }, $true)).Count -eq 0) '07dc creates the forest without prompting for a DSRM password.'
+    $genFn = $forestAst.FindAll({ param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'New-ALFRandomPassword' }, $true)[0]
+    . ([scriptblock]::Create($genFn.Extent.Text))
+    $toPlain = { param($s) (New-Object Net.NetworkCredential('', $s)).Password }
+    $dsrm = New-ALFRandomPassword
+    Assert ($dsrm -is [Security.SecureString] -and $dsrm.Length -eq 32) 'The DSRM password is a 32-character SecureString.'
+    Assert ((& $toPlain $dsrm) -cne (& $toPlain (New-ALFRandomPassword))) 'Each DSRM password is random.'
+    $complex = $true
+    foreach ($i in 1..200) {
+        $p = & $toPlain (New-ALFRandomPassword 4)
+        if ($p.Length -ne 4 -or $p -cnotmatch '[A-Z]' -or $p -cnotmatch '[a-z]' -or $p -notmatch '[0-9]' -or $p -notmatch '[^A-Za-z0-9]') { $complex = $false }
+    }
+    Assert $complex 'Even a 4-character password has an upper, lower, digit and symbol, so it meets Windows complexity rules.'
     Write-Output "PASS: $script:Passed detected-status/state cases; no guest settings changed."
 }
 finally { Microsoft.PowerShell.Management\Remove-Item -LiteralPath $folder -Recurse -Force }

@@ -252,8 +252,12 @@ It asks for administrator rights and expects to run from `C:\ISO`, with the roll
 
 **Host and guest time zones are optional:** scripts 01, 06dc, 08adm and 12 attempt the planned Windows time-zone ID. Any ID unavailable on the destination, including `Manitoba Standard Time`, falls back to `Eastern Standard Time`. If Eastern is also unavailable, or lookup/setting fails, a warning is printed and setup continues. Blank/unfilled values keep the current zone. Host Console step 1 (`-DiskOnly`) follows the same rule; actual disk/folder errors still fail normally. This changes display time only, not time synchronization, and the requested plan value is retained. Do not rerun the complete node-configure script just to change its time zone, because its storage cleanup is destructive.
 
-Scripts ask for passwords when they're needed: the host VM admin (00), DSRM (07dc), the LCM
+Scripts ask for passwords when they're needed: the host VM admin (00), the LCM
 account (09dc) and the nodes' built-in Administrator (11). They're never saved or displayed.
+Script 07dc doesn't ask for a DSRM (Directory Services Restore Mode) password: the lab never uses
+it, so the script sets a random 32-character one that is never shown or saved. If you ever need
+DSRM, set a new password on the DC as a domain admin with
+`ntdsutil "set dsrm password" "reset password on server null" quit quit`.
 
 **One exception, by choice:** the **second local admin password** (Lab Builder group 6) can be
 entered in the Lab Builder. It's then saved in **plain text** in `LabValues.json` and injected
