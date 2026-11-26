@@ -75,6 +75,7 @@ Azure VM (super-host, Hyper-V)
 4. **Prepare Azure** (group 4 has the resource group, region and copyable CLI commands) or use the Azure buttons:
    **1. Create resource groups**, **2. Assign roles on RG**, **3. Review Azure Policy**.
 5. **Roll out scripts.** The filled-in scripts are written to the `Rollout` folder.
+   Rollout always uses the scripts from the same release as the Planning Console. If your saved **Template folder** points at an older or newer release's files (for example a `LabValues.json` copied from a previous version's folder), the Planning Console uses its own folder and `Rollout` subfolder instead and logs a note; a rollout from a folder with mixed-release scripts is blocked and names the file to replace.
 6. **Create the host VM** with `00.Workstation-CreateHostVM.ps1`, then copy everything in the `Rollout` folder to `C:\ISO` on the host VM.
 7. **On the host, start the Host Console** (`Launch-ALFHostConsole.cmd` in `C:\ISO`) and work down its steps. Or run the scripts in order (below) yourself.
 

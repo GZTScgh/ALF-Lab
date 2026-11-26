@@ -461,6 +461,55 @@ function Get-ALFDomainDN([string]$DomainFqdn) {
     return (($DomainFqdn.Split('.') | ForEach-Object { "DC=$_" }) -join ',')
 }
 
+#Scripts, command files and host/guest console launchers are rolled out; the Planning Console itself is not
+function Get-ALFRolloutTemplateFiles([string]$Folder) {
+    return @(Get-ChildItem -LiteralPath $Folder -File | Where-Object {
+        ($_.Extension -in ".ps1", ".txt" -and $_.Name -ne "ALFLabBuilder.ps1") -or $_.Name -in @("Launch-ALFHostConsole.cmd", "Launch-ALFDCConsole.cmd", "Launch-ALFAdminConsole.cmd", "Launch-ALFNodeConsole.cmd")
+    } | Sort-Object Name)
+}
+
+#Every lab file carries a version stamp in its header; '' means the file has none
+function Get-ALFTemplateVersion([string]$Text) {
+    if ($Text -match '(?m)^(#|rem) Version: ALF Lab Builder (\S+)') { return $Matches[2] }
+    return ''
+}
+
+#Template files stamped with a different release than this Planning Console
+function Get-ALFStaleTemplateFiles([string]$Folder, [string]$Version) {
+    $stale = @()
+    if (-not $Folder -or -not (Test-Path -LiteralPath $Folder -PathType Container)) { return $stale }
+    foreach ($f in Get-ALFRolloutTemplateFiles $Folder) {
+        $stamp = Get-ALFTemplateVersion (Get-Content -LiteralPath $f.FullName -Raw)
+        if ($stamp -and $stamp -ne $Version) { $stale += [pscustomobject]@{ Name = $f.Name; Version = $stamp } }
+    }
+    return $stale
+}
+
+function Get-ALFFullFolderPath([string]$Folder) {
+    try { return [IO.Path]::GetFullPath($Folder).TrimEnd('\') } catch { return $Folder.TrimEnd('\') }
+}
+
+#Folders saved in LabValues.json. A saved template folder holding another release's lab files (for example an
+#older copy of the Lab Builder) is replaced by this Planning Console's folder, so rollout uses this release's scripts.
+function Resolve-ALFRolloutFolders([string]$TemplateFolder, [string]$RolloutFolder, [string]$BuilderFolder, [string]$Version) {
+    $result = [pscustomobject]@{
+        TemplateFolder = if ($TemplateFolder) { $TemplateFolder } else { $BuilderFolder }
+        RolloutFolder  = if ($RolloutFolder) { $RolloutFolder } else { Join-Path $BuilderFolder "Rollout" }
+        Note           = ''
+    }
+    if (-not $TemplateFolder -or (Get-ALFFullFolderPath $TemplateFolder) -eq (Get-ALFFullFolderPath $BuilderFolder)) { return $result }
+    $stale = @(Get-ALFStaleTemplateFiles $TemplateFolder $Version)
+    if (-not $stale.Count) { return $result }
+    $result.TemplateFolder = $BuilderFolder
+    #A rollout folder beside the old template folder is that copy's default - move it beside this one too
+    if (-not $RolloutFolder -or (Get-ALFFullFolderPath $RolloutFolder) -eq (Get-ALFFullFolderPath (Join-Path $TemplateFolder "Rollout"))) {
+        $result.RolloutFolder = Join-Path $BuilderFolder "Rollout"
+    }
+    $result.Note = "Note: the saved template folder $TemplateFolder has version $((@($stale.Version) | Sort-Object -Unique) -join ', ') scripts; this Planning Console is version $Version. " +
+        "Using this Planning Console's folder instead: $BuilderFolder (rollout folder: $($result.RolloutFolder)). Save or roll out to keep these folders."
+    return $result
+}
+
 function Load-Values {
     if (-not (Test-Path $ValuesFile)) {
         [System.Windows.MessageBox]::Show("Can't find $ValuesFile", "1. ALF Lab Builder - Planning Console") | Out-Null
@@ -505,10 +554,10 @@ function Load-Values {
     }
 
     #Folders - default to the folder this tool is in, and a "Rollout" folder beside it
-    $tpl = $script:LabData.Settings.TemplateFolder
-    $out = $script:LabData.Settings.RolloutFolder
-    $ui.txtTemplates.Text = if ($tpl) { $tpl } else { $PSScriptRoot }
-    $ui.txtRollout.Text   = if ($out) { $out } else { Join-Path $PSScriptRoot "Rollout" }
+    $folders = Resolve-ALFRolloutFolders ([string]$script:LabData.Settings.TemplateFolder) ([string]$script:LabData.Settings.RolloutFolder) $PSScriptRoot $ALFVersion
+    $ui.txtTemplates.Text = $folders.TemplateFolder
+    $ui.txtRollout.Text   = $folders.RolloutFolder
+    if ($folders.Note) { Write-Log $folders.Note }
     $script:AppliedIdentifier = $identifier
     $ui.txtIdentifier.Text = $identifier
     Set-ClusterIdentifier -Quiet | Out-Null
@@ -892,6 +941,15 @@ function Invoke-Rollout {
     $out = $ui.txtRollout.Text
     if (-not (Test-Path $tpl)) { Write-Log "Template folder not found: $tpl"; return }
     if ((Resolve-Path $tpl).Path -eq [IO.Path]::GetFullPath($out)) { Write-Log "The rollout folder can't be the same as the template folder."; return }
+    #Never mix scripts from another release into this release's rollout
+    $stale = @(Get-ALFStaleTemplateFiles $tpl $ALFVersion)
+    if ($stale.Count) {
+        $fix = if ((Get-ALFFullFolderPath $tpl) -eq (Get-ALFFullFolderPath $PSScriptRoot)) { "Replace them with the files from ALF Lab Builder $ALFVersion" }
+               else { "Set the Template folder to this Planning Console's folder ($PSScriptRoot)" }
+        Write-Log ("Rollout blocked: {0} file(s) in {1} are from version {2}, but this Planning Console is version {3} (for example {4}). {5}, then roll out again." -f
+            $stale.Count, $tpl, ((@($stale.Version) | Sort-Object -Unique) -join ', '), $ALFVersion, $stale[0].Name, $fix)
+        return
+    }
     New-Item -Path $out -ItemType Directory -Force | Out-Null
 
     #Lookup table: key -> value
@@ -903,21 +961,14 @@ function Invoke-Rollout {
         elseif (-not [string]::IsNullOrWhiteSpace($i.Value)) { $map[$i.Key] = $i.Value }
     }
 
-    #Scripts, command files and host/guest console launchers are rolled out; the Planning Console itself is not
-    $files = Get-ChildItem -Path $tpl -File | Where-Object {
-        ($_.Extension -in ".ps1", ".txt" -and $_.Name -ne "ALFLabBuilder.ps1") -or $_.Name -in @("Launch-ALFHostConsole.cmd", "Launch-ALFDCConsole.cmd", "Launch-ALFAdminConsole.cmd", "Launch-ALFNodeConsole.cmd")
-    } | Sort-Object Name
+    $files = @(Get-ALFRolloutTemplateFiles $tpl)
     $pattern = '\{\{([A-Za-z0-9_]+)\}\}'
     $unknown = @{}
     Write-Log "Rolling out $($files.Count) scripts from $tpl to $out"
 
     foreach ($f in $files) {
         $text  = Get-Content -Path $f.FullName -Raw
-        #Every lab file carries a version stamp in its header - flag any file from a different release
-        if ($text -match '(?m)^(#|rem) Version: ALF Lab Builder (\S+)') {
-            if ($Matches[2] -ne $ALFVersion) { Write-Log ("  WARNING: {0} is from version {1}; the Lab Builder is version {2}" -f $f.Name, $Matches[2], $ALFVersion) }
-        }
-        else { Write-Log ("  WARNING: {0} has no version stamp - it may be from an older release" -f $f.Name) }
+        if (-not (Get-ALFTemplateVersion $text)) { Write-Log ("  WARNING: {0} has no version stamp - it may be from an older release" -f $f.Name) }
         #Replace each {{Key}} with its value; leave unknown/empty ones as they are
         $new = [regex]::Replace($text, $pattern, {
             param($m)
