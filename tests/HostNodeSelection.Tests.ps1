@@ -261,6 +261,21 @@ try {
     Assert ((Get-ImageInfo 'AzureLocalIso').Dest -eq $msIso) 'A finished download under Microsoft''s name is used.'
     Assert ((Get-ImageLabel (Get-ImageInfo 'AzureLocalIso')) -eq $isoName) 'The ISO card shows Microsoft''s file name.'
     Assert ((Get-TaskCheck $isoTask).State -eq 'Done') 'A finished download under Microsoft''s name counts as done.'
+    $cpu = { param($Vmx, $Slat, $Firmware) [pscustomobject]@{ VMMonitorModeExtensions = $Vmx; SecondLevelAddressTranslationExtensions = $Slat; VirtualizationFirmwareEnabled = $Firmware } }
+    $virt = Test-ALFHyperVCapable -Processor (& $cpu $true $true $true) -HyperVInstalled $false -VbsStatus 0
+    Assert ($virt.State -eq 'Capable' -and $virt.Details -eq 'Virtualization extensions: yes, SLAT: yes, enabled in firmware: yes') 'Nested virtualization reads as able to run Hyper-V.'
+    $virt = Test-ALFHyperVCapable -Processor (& $cpu $false $false $false) -HyperVInstalled $false -VbsStatus 0
+    Assert ($virt.State -eq 'NotCapable' -and $virt.Reason -match "can't run Hyper-V") 'A VM size without nested virtualization is not able to run Hyper-V.'
+    $virt = Test-ALFHyperVCapable -Processor (& $cpu $false $false $false) -HyperVInstalled $false -VbsStatus 2
+    Assert ($virt.State -eq 'Unknown' -and $virt.Reason -match 'Virtualization-based security') 'Virtualization-based security hides the CPU settings, so it is not a clear no.'
+    Assert ((Test-ALFHyperVCapable -Processor (& $cpu $false $false $false) -HyperVInstalled $true -VbsStatus 0).State -eq 'Capable') 'Hyper-V already installed proves the VM can run it.'
+    Assert ((Test-ALFHyperVCapable -Processor $null -HyperVInstalled $false -VbsStatus $null).State -eq 'Unknown') 'Unreadable CPU settings are not a clear no.'
+    Assert ((Test-ALFHyperVCapable -Processor (& $cpu $true $false $true) -HyperVInstalled $false -VbsStatus 0).State -eq 'Unknown') 'Incomplete CPU settings are not a clear no.'
+    Assert ((Test-ALFHyperVCapable -Processor (& $cpu $true $true $null) -HyperVInstalled $false -VbsStatus 0).State -eq 'Capable') 'An unreported firmware setting does not block a capable CPU.'
+    $script:VirtCheck = @{ State = 'NotCapable'; Reason = "This VM size can't run Hyper-V."; Details = 'x' }
+    $diskCheck = Get-TaskCheck ([pscustomobject]@{ Id = 'Disk' })
+    Assert ($diskCheck.State -eq 'Attention' -and $diskCheck.Detail -match 'resize the Azure VM') 'The step 1 card flags a VM size that cannot run Hyper-V.'
+    $script:VirtCheck = $null
     Assert (-not @(Get-ChildItem -LiteralPath $fixtureRoot -Filter '*.tmp').Count) 'No settings temporary files may remain.'
     Write-Output "PASS: $script:Passed focused node-selection checks; real WPF controls, no provisioning."
 }

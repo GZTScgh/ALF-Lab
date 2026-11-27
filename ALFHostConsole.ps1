@@ -81,7 +81,7 @@ $StateFile = Join-Path $Here "ALFHostConsole-State.json"
 $Tasks = @(
     [pscustomobject]@{ Id = "Disk";     Kind = "Script";   Script = "01.Host-PrepareDataDisk.ps1"; Args = "-DiskOnly"; Needs = @()
         Title = "Prepare the data disk"
-        Text  = "Attempts the optional time-zone change (any unavailable ID falls back to Eastern Standard Time), brings the 1 TB data disk online as F: and creates C:\ISO and F:\VMs. Time-zone failures warn and do not stop disk preparation." }
+        Text  = "Attempts the optional time-zone change (any unavailable ID falls back to Eastern Standard Time), then checks this VM can run Hyper-V (nested virtualization) - if this VM size can't, it stops unless you type YES. Then brings the 1 TB data disk online as F: and creates C:\ISO and F:\VMs. Time-zone failures warn and do not stop disk preparation." }
     [pscustomobject]@{ Id = "ServerVhd"; Kind = "Download"; Script = ""; Args = ""; Needs = @()
         Title = "Download the Windows Server 2025 evaluation VHDX"
         Text  = "The disk image for the domain controller and the admin station. Saved to C:\ISO." }
@@ -392,6 +392,9 @@ function Get-TaskCheck($Task) {
     $hyperV = [bool](Get-Command Get-VM -ErrorAction SilentlyContinue)
     switch ($Task.Id) {
         "Disk" {
+            if ($script:VirtCheck -and $script:VirtCheck.State -eq "NotCapable") {
+                return @{ State = "Attention"; Detail = "This VM size can't run Hyper-V - resize the Azure VM" }
+            }
             $vol = Get-Volume -DriveLetter $DataDrive -ErrorAction SilentlyContinue
             if ($vol -and (Test-Path "${DataDrive}:\VMs") -and (Test-Path "C:\ISO")) {
                 return @{ State = "Done"; Detail = ("{0}: {1:N0} GB free" -f $DataDrive, ($vol.SizeRemaining / 1GB)) }
@@ -926,6 +929,12 @@ function Test-ConsoleSetup {
         else { $warn += "$($t.Script) has no version stamp - it may be from an older release." }
         if ($text -match '\{\{[A-Za-z0-9_]+\}\}') { $warn += "$($t.Script) still has {{...}} placeholders - roll it out with the Planning Console." }
     }
+    if ($script:VirtCheck) {
+        if ($script:VirtCheck.State -eq "NotCapable") {
+            $warn += "$($script:VirtCheck.Reason) Resize the Azure VM to a size that supports nested virtualization (Planning Console > Refresh Azure sizes lists them) before building the lab. ($($script:VirtCheck.Details))"
+        }
+        else { Write-Log "Hyper-V check: $($script:VirtCheck.Reason) $($script:VirtCheck.Details)" }
+    }
     foreach ($w in $warn) { Write-Log "WARNING: $w" }
     if ($warn.Count) {
         $ui.txtWarn.Text = ($warn -join "`n")
@@ -973,6 +982,7 @@ if ($window.Width  -gt $work.Width)  { $window.Width  = $work.Width }
 if ($window.Height -gt $work.Height) { $window.Height = $work.Height }
 
 Write-Log "2. ALF Lab Builder - Host Console $ALFVersion on $env:COMPUTERNAME - scripts in $Here"
+$script:VirtCheck = try { Test-ALFHyperVCapable } catch { $null }
 Test-ConsoleSetup
 Resume-ExistingDownloads
 Update-AllStatus

@@ -2,10 +2,11 @@
 # Version: ALF Lab Builder 2.1.1   (should match VERSION.txt - if this file was replaced on its own, check it is from the same release)
 # 01.Host-PrepareDataDisk.ps1
 # Prepares the lab host:
-#   1. Creates C:\ISO and F:\VMs
-#   2. Brings the 1 TB data disk online as F:
-#   3. Gets the two install images into C:\ISO (downloads them if missing)
-#      (with -DiskOnly it stops after step 2 - the Host Console downloads the images itself)
+#   1. Checks this VM can run Hyper-V (nested virtualization) - stops unless you type YES
+#   2. Creates C:\ISO and F:\VMs
+#   3. Brings the 1 TB data disk online as F:
+#   4. Gets the two install images into C:\ISO (downloads them if missing)
+#      (with -DiskOnly it stops after step 3 - the Host Console downloads the images itself)
 #        - Windows Server 2025 evaluation VHDX  (for the domain controller)
 #        - Azure Local ISO                      (for the cluster nodes)
 #
@@ -26,7 +27,7 @@
 #        the files come straight from Microsoft's network.
 ##############################################################
 
-#-DiskOnly: time zone, data disk and folders only. The Host Console runs it this way and
+#-DiskOnly: time zone, Hyper-V check, data disk and folders only. The Host Console runs it this way and
 #           downloads the two images itself, with a progress bar.
 param([switch]$DiskOnly)
 
@@ -165,6 +166,12 @@ $cs = Get-CimInstance Win32_ComputerSystem
 Write-Host "    Logical processors: $($cs.NumberOfLogicalProcessors)"
 Write-Host "    Memory            : $([math]::Round($cs.TotalPhysicalMemory/1GB)) GB"
 
+#No sense building anything if this VM size can't run Hyper-V
+#LEARN: Azure turns nested virtualization on for supported sizes - you can't switch it on inside the VM.
+. (Join-Path $PSScriptRoot 'ALFNodeSettings.ps1')
+Write-Host "  Check this VM can run Hyper-V" -ForegroundColor Cyan
+Assert-ALFHyperVCapable 'step 1'
+
 #Create C:\ISO first (holds the scripts and the two images)
 Write-Host "  Create C:\ISO" -ForegroundColor Cyan
 New-Item -Path "C:\ISO" -ItemType Directory -Force | Out-Null
@@ -236,7 +243,6 @@ catch { throw "$ServerVhd is not a valid virtual disk - delete it and run this s
 
 
 #========== IMAGE 2: AZURE LOCAL ISO ==========
-. (Join-Path $PSScriptRoot 'ALFNodeSettings.ps1')
 Test-ALFAzureLocalImageRelease $AzureLocalImageRelease
 $AzureLocalIso = Resolve-ALFAzureLocalIso $AzureLocalIso $AzureLocalImageRelease
 Write-Host "  Image 2: Azure Local ISO (release $AzureLocalImageRelease)" -ForegroundColor Cyan

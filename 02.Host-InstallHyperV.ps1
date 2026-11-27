@@ -21,18 +21,13 @@ $OS = (Get-CimInstance Win32_OperatingSystem).Caption
 Write-Host "    $OS"
 if ($OS -notmatch "Server") { throw "This script is for Windows Server" }
 
-#Confirm the VM size supports nested virtualization
+#Confirm the VM size supports nested virtualization (same check as step 1)
 Write-Host "  Check nested virtualization support" -ForegroundColor Cyan
 if ((Get-WindowsFeature Hyper-V).Installed) {
     Write-Host "    Hyper-V already installed - skipping check" -ForegroundColor Yellow
 } else {
-    $req = Get-ComputerInfo -Property HyperVRequirement*
-    $req | Format-List
-    if ($req.HyperVRequirementVMMonitorModeExtensions -eq $false -or
-        $req.HyperVRequirementVirtualizationFirmwareEnabled -eq $false) {
-        throw "This VM size doesn't support nested virtualization - resize the Azure VM"
-    }
-    Write-Host "    Nested virtualization supported" -ForegroundColor Green
+    . (Join-Path $PSScriptRoot 'ALFNodeSettings.ps1')
+    Assert-ALFHyperVCapable 'step 2'
 }
 
 #Install Hyper-V role + management tools (Hyper-V Manager and PowerShell module)

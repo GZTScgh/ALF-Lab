@@ -84,8 +84,8 @@ Azure VM (super-host, Hyper-V)
 | # | Script | Runs on | What it does |
 |---|---|---|---|
 | 00 | `00.Workstation-CreateHostVM.ps1` | Your PC / Cloud Shell | Creates the Azure host VM with a 1 TB data disk; RDP open to your IP only |
-| 01 | `01.Host-PrepareDataDisk.ps1` | Host VM | Creates `C:\ISO`, formats the data disk as `F:`, downloads both images |
-| 02 | `02.Host-InstallHyperV.ps1` | Host VM | Installs Hyper-V and its tools (asks before restarting) |
+| 01 | `01.Host-PrepareDataDisk.ps1` | Host VM | Checks the VM can run Hyper-V (stops unless you type YES), creates `C:\ISO`, formats the data disk as `F:`, downloads both images |
+| 02 | `02.Host-InstallHyperV.ps1` | Host VM | Repeats the step 1 Hyper-V check, installs Hyper-V and its tools (asks before restarting) |
 | 03 | `03.Host-CreateVMSwitches.ps1` | Host VM | Creates the NAT switch, the storage switch and the gateway firewall rule |
 | 04dc | `04dc.Host-CreateDCVM.ps1` | Host VM | Creates ContosoDC1 from the evaluation VHDX |
 | 04adm | `04adm.Host-CreateAdminStationVM.ps1` | Host VM | Creates the admin station VM |
@@ -219,7 +219,7 @@ It asks for administrator rights and expects to run from `C:\ISO`, with the roll
 
 | Step | What it runs |
 |---|---|
-| 1. Prepare the data disk | `01.Host-PrepareDataDisk.ps1 -DiskOnly` - time zone, `F:`, `C:\ISO`, `F:\VMs` |
+| 1. Prepare the data disk | `01.Host-PrepareDataDisk.ps1 -DiskOnly` - time zone, Hyper-V check (nested virtualization), `F:`, `C:\ISO`, `F:\VMs` |
 | 2. Download the Windows Server 2025 evaluation VHDX | Downloads in the console, with a progress bar |
 | 3. Download the Azure Local ISO | Downloads the planned image release in the console, with a progress bar |
 | 4. Install Hyper-V | `02.Host-InstallHyperV.ps1` (restarts the host - open the console again afterwards) |

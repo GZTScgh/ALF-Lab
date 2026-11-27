@@ -83,9 +83,28 @@ foreach ($handler in @(
 }
 
 function Get-CimInstance {
-    param($ClassName)
-    [pscustomobject]@{ NumberOfLogicalProcessors = 20; TotalPhysicalMemory = 96GB }
+    [CmdletBinding()]
+    param($ClassName, $Namespace)
+    switch ($ClassName) {
+        'Win32_Processor' { $script:Cpu }
+        'Win32_DeviceGuard' { [pscustomobject]@{ VirtualizationBasedSecurityStatus = 0 } }
+        default { [pscustomobject]@{ NumberOfLogicalProcessors = 20; TotalPhysicalMemory = 96GB } }
+    }
 }
+function Get-Service {
+    [CmdletBinding()]
+    param($Name)
+    if ($script:HyperVService) { [pscustomobject]@{ Name = $Name } }
+}
+function Read-Host {
+    param($Prompt)
+    $script:Prompts.Add([string]$Prompt)
+    $script:Answer
+}
+$capableCpu = [pscustomobject]@{ VMMonitorModeExtensions = $true; SecondLevelAddressTranslationExtensions = $true; VirtualizationFirmwareEnabled = $true }
+$noNestedCpu = [pscustomobject]@{ VMMonitorModeExtensions = $false; SecondLevelAddressTranslationExtensions = $false; VirtualizationFirmwareEnabled = $false }
+$script:HyperVService = $false
+$script:Prompts = [Collections.Generic.List[string]]::new()
 function New-Item {
     param($Path, $ItemType, [switch]$Force)
     $script:CreatedFolders.Add($Path)
@@ -99,27 +118,53 @@ function Get-Volume {
     param($DriveLetter)
     [pscustomobject]@{ DriveLetter = $DriveLetter }
 }
-# Test a filled-in copy of the template (Rollout\ is local-only). Dot-source it so the mocks keep this script's $script: state.
-$hostScript = Join-Path ([IO.Path]::GetTempPath()) ('ALF-HostTimeZone-' + [guid]::NewGuid().ToString('N') + '.ps1')
+# Test a filled-in copy of the template (Rollout\ is local-only) next to its shared helpers. Dot-source it so the mocks keep this script's $script: state.
+$hostFolder = Join-Path ([IO.Path]::GetTempPath()) ('ALF-HostTimeZone-' + [guid]::NewGuid().ToString('N'))
+$null = [IO.Directory]::CreateDirectory($hostFolder)
+$hostScript = Join-Path $hostFolder '01.Host-PrepareDataDisk.ps1'
 $hostText = (Get-Content -LiteralPath (Join-Path $root '01.Host-PrepareDataDisk.ps1') -Raw).Replace('{{TimeZone}}', 'Manitoba Standard Time')
 [IO.File]::WriteAllText($hostScript, $hostText, [Text.UTF8Encoding]::new($true))
+Copy-Item -LiteralPath (Join-Path $root 'ALFNodeSettings.ps1') -Destination $hostFolder
+function Reset-HostRun {
+    $script:CreatedFolders = [Collections.Generic.List[string]]::new()
+    $script:Messages.Clear(); $script:SetCalls.Clear(); $script:Prompts.Clear(); $script:CurrentZone = 'UTC'
+    $script:DiskFails = $false; $script:Cpu = $capableCpu; $script:HyperVService = $false; $script:Answer = ''
+}
 try {
     foreach ($failure in 'Set', 'Lookup', 'MissingFallback') {
-        $script:CreatedFolders = [Collections.Generic.List[string]]::new()
-        $script:Messages.Clear(); $script:SetCalls.Clear(); $script:CurrentZone = 'UTC'
+        Reset-HostRun
         $script:LookupFails = $failure -eq 'Lookup'; $script:SetFails = $failure -eq 'Set'
-        $script:DiskFails = $false
         $script:Zones = if ($failure -eq 'MissingFallback') { @('UTC') } else { @('Eastern Standard Time') }
         . $hostScript -DiskOnly | Out-Null
         Assert ($script:CreatedFolders -contains 'C:\ISO' -and $script:CreatedFolders -contains 'F:\VMs') 'Host step 1 must continue to prepare folders after an optional time-zone failure.'
         Assert (@($script:Messages | Where-Object { $_ -match 'Data disk ready' }).Count -eq 1) 'The actual -DiskOnly entry point must finish after a time-zone failure.'
         Assert (@($script:Messages | Where-Object { $_ -match 'Optional time-zone change skipped|Manitoba Standard Time.*unavailable' }).Count -ge 1) 'Host step 1 must reach the optional time-zone handler.'
+        Assert (@($script:Messages | Where-Object { $_ -match '^\s*This VM can run Hyper-V \(nested' }).Count -eq 1 -and $script:Prompts.Count -eq 0) 'A VM that can run Hyper-V passes the check without a question.'
     }
+    $script:LookupFails = $false; $script:SetFails = $false; $script:Zones = @('Eastern Standard Time')
+    Reset-HostRun
+    $script:Cpu = $noNestedCpu; $script:Answer = 'no'
+    $stopped = $false
+    try { . $hostScript -DiskOnly | Out-Null }
+    catch { $stopped = $_.Exception.Message -match "Stopped: this VM can't run Hyper-V.*step 1" }
+    Assert $stopped 'A VM size without nested virtualization stops step 1 unless you type YES.'
+    Assert ($script:Prompts.Count -eq 1 -and $script:CreatedFolders.Count -eq 0) 'Step 1 asks once and builds nothing when stopped.'
+    Assert (@($script:Messages | Where-Object { $_ -match 'Resize the Azure VM.*Refresh Azure sizes' }).Count -eq 1) 'Explain how to fix a VM size without nested virtualization.'
+    Reset-HostRun
+    $script:Cpu = $noNestedCpu; $script:Answer = ' yes '
+    . $hostScript -DiskOnly | Out-Null
+    Assert ($script:CreatedFolders -contains 'C:\ISO' -and @($script:Messages | Where-Object { $_ -match 'Data disk ready' }).Count -eq 1) 'Typing YES continues step 1.'
+    Assert (@($script:Messages | Where-Object { $_ -match 'Continuing anyway' }).Count -eq 1) 'Continuing anyway is called out.'
+    Reset-HostRun
+    $script:Cpu = $noNestedCpu; $script:HyperVService = $true
+    . $hostScript -DiskOnly | Out-Null
+    Assert ($script:Prompts.Count -eq 0 -and $script:CreatedFolders -contains 'C:\ISO') 'An installed Hyper-V hides the CPU settings but proves the VM can run it.'
+    Reset-HostRun
     $script:DiskFails = $true
     $diskFailed = $false
     try { . $hostScript -DiskOnly | Out-Null }
     catch { $diskFailed = $_.Exception.Message -eq 'Simulated disk failure' }
     Assert $diskFailed 'Real disk-preparation failures must still fail host step 1.'
 }
-finally { Remove-Item -LiteralPath $hostScript -Force -ErrorAction SilentlyContinue }
+finally { Remove-Item -LiteralPath $hostFolder -Recurse -Force -ErrorAction SilentlyContinue }
 Write-Output "PASS: $script:Passed host/guest time-zone checks; all three guest roles and host -DiskOnly, no system changes."

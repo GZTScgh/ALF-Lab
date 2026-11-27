@@ -1,5 +1,5 @@
 ﻿# Version: ALF Lab Builder 2.1.1
-# Shared host-only node selection and Azure Local image helpers; never edits the Planning Console plan.
+# Shared host-only node selection, Azure Local image and Hyper-V capability helpers; never edits the Planning Console plan.
 
 #The Azure Local image release is the YYMM number from the Planning Console (2608 = the August 2026 release).
 function Test-ALFAzureLocalImageRelease([string]$Release) {
@@ -56,6 +56,55 @@ function Get-ALFAzureLocalIsoPath([string]$Default, [string]$Url, [string]$Relea
     catch { }
     finally { if ($response) { $response.Close() } }
     return $Default
+}
+
+#Checks this VM can run Hyper-V (on Azure: the VM size supports nested virtualization).
+#Returns @{ State = 'Capable', 'NotCapable' or 'Unknown'; Reason; Details }.
+#LEARN: Windows shows the CPU's virtualization settings in Win32_Processor. While a hypervisor runs Windows
+#       itself (Hyper-V already installed, or virtualization-based security) they read "no" even on a
+#       capable VM, so only a clear "no" counts as NotCapable. The parameters let tests supply the facts.
+function Test-ALFHyperVCapable {
+    param($Processor, $HyperVInstalled, $VbsStatus)
+    if (-not $PSBoundParameters.ContainsKey('HyperVInstalled')) { $HyperVInstalled = [bool](Get-Service -Name vmms -ErrorAction SilentlyContinue) }
+    if ($HyperVInstalled) { return @{ State = 'Capable'; Reason = 'Hyper-V is already installed on this VM.'; Details = 'Hyper-V: installed' } }
+    if (-not $PSBoundParameters.ContainsKey('Processor')) {
+        $Processor = try { Get-CimInstance -ClassName Win32_Processor -ErrorAction Stop | Select-Object -First 1 } catch { $null }
+    }
+    if (-not $PSBoundParameters.ContainsKey('VbsStatus')) {
+        $VbsStatus = try { (Get-CimInstance -Namespace root\Microsoft\Windows\DeviceGuard -ClassName Win32_DeviceGuard -ErrorAction Stop).VirtualizationBasedSecurityStatus } catch { $null }
+    }
+    $vmx = $null; $slat = $null; $firmware = $null
+    if ($Processor) { $vmx = $Processor.VMMonitorModeExtensions; $slat = $Processor.SecondLevelAddressTranslationExtensions; $firmware = $Processor.VirtualizationFirmwareEnabled }
+    $word = { param($Value) if ($null -eq $Value) { 'unknown' } elseif ($Value) { 'yes' } else { 'no' } }
+    $details = "Virtualization extensions: $(& $word $vmx), SLAT: $(& $word $slat), enabled in firmware: $(& $word $firmware)"
+    if ($VbsStatus -eq 2) { $details += ' (virtualization-based security is running)' }
+    if ($vmx -eq $true -and $slat -eq $true -and $firmware -ne $false) {
+        return @{ State = 'Capable'; Reason = 'This VM can run Hyper-V (nested virtualization).'; Details = $details }
+    }
+    if ($VbsStatus -ne 2 -and $vmx -eq $false) {
+        return @{ State = 'NotCapable'; Reason = "This VM size can't run Hyper-V: it doesn't offer nested virtualization."; Details = $details }
+    }
+    $reason = "The CPU's virtualization settings are incomplete."
+    if (-not $Processor) { $reason = "Couldn't read the CPU's virtualization settings." }
+    elseif ($VbsStatus -eq 2) { $reason = "Virtualization-based security hides the CPU's virtualization settings." }
+    return @{ State = 'Unknown'; Reason = $reason; Details = $details }
+}
+
+#Shows the Hyper-V check in a host step. Stops when this VM size can't run Hyper-V, unless you type YES.
+function Assert-ALFHyperVCapable([string]$Step) {
+    $check = Test-ALFHyperVCapable
+    Write-Host "    $($check.Details)"
+    if ($check.State -eq 'Capable') { Write-Host "    $($check.Reason)" -ForegroundColor Green; return }
+    if ($check.State -eq 'Unknown') {
+        Write-Host "    $($check.Reason) Continuing - if Hyper-V doesn't install or start, resize the Azure VM to a size that supports nested virtualization." -ForegroundColor Yellow
+        return
+    }
+    Write-Host "    $($check.Reason)" -ForegroundColor Red
+    Write-Host "    Resize the Azure VM to a size that supports nested virtualization (Planning Console > Refresh Azure sizes lists them), then run $Step again." -ForegroundColor Red
+    if ((Read-Host '    Type YES to continue anyway (anything else stops)') -notmatch '^\s*YES\s*$') {
+        throw "Stopped: this VM can't run Hyper-V. Resize the Azure VM, then run $Step again."
+    }
+    Write-Host '    Continuing anyway - Hyper-V may not install or run on this VM size.' -ForegroundColor Yellow
 }
 
 #A lab has 2 to 16 Azure Local nodes (the planned pair is the default).
