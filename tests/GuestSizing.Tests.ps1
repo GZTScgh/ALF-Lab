@@ -152,4 +152,17 @@ Assert ($ui.txtSizingSummary.Text -match '^INVALID LAB SIZING:') 'Expose the act
 ($items | Where-Object Key -eq 'DCMemoryGB').Value = ''
 Update-LabSizingStatus | Out-Null
 Assert (($items | Where-Object Key -eq 'NodeVcpus').Status -eq 'Invalid sizing' -and ($items | Where-Object Key -eq 'DCMemoryGB').Status -eq 'Invalid sizing') 'Several invalid input fields must not be shown as OK when the first validation failure is reported.'
+
+foreach ($name in 'Get-ALFImagePlanRows', 'Initialize-ALFImagePlan') {
+    . ([scriptblock]::Create($ast.FindAll({param($n) $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq $name}, $true)[0].Extent.Text))
+}
+$imageRows = @(Get-ALFImagePlanRows)
+$oldImageText = 'The host downloads https://aka.ms/hcireleaseimage/<release> to C:\ISO\AzureLocal-<release>.iso; an ISO already in C:\ISO for the same release is used as is.'
+$imagePlan = [pscustomobject]@{ Values = @(
+    [pscustomobject]@{ Key = 'AzureLocalImageRelease'; Value = '2609'; Description = $oldImageText },
+    $imageRows[1]
+) }
+Initialize-ALFImagePlan $imagePlan
+$imageRow = $imagePlan.Values | Where-Object Key -eq 'AzureLocalImageRelease'
+Assert ($imageRow.Description -eq $imageRows[0].Description -and $imageRow.Value -eq '2609' -and $imagePlan.Values.Count -eq 2) 'Plans from 2.1.0 get the keep-Microsoft''s-name ISO help text and keep their release.'
 Write-Output "PASS: $script:Passed guest-sizing checks; no provisioning."

@@ -234,6 +234,33 @@ try {
     Assert ((Get-ALFNodeDeliveryCheck 'Node3' $deliveryNode $deliverySources 'vm-3').State -eq 'Attention') 'Updated console files must invalidate old delivery receipts.'
     Set-Content -LiteralPath $deliveryReceiptPath -Value '{broken'
     Assert ((Get-ALFNodeDeliveryCheck 'Node3' $deliveryNode $deliverySources 'vm-3').State -eq 'Attention') 'Corrupt receipts must fail closed.'
+    $isoName = 'AzureLocal24H2.26100.32230.LCM.12.2609.0.3009.x64.en-us.iso'
+    $bing = 'https://www.bing.com/?ref=aka&shorturl=hcireleaseimage%2F2609'
+    Assert ((Get-ALFAzureLocalIsoFileName $bing "attachment; filename=$isoName; filename*=UTF-8''$isoName" '2609') -eq $isoName) 'Read the ISO name from Content-Disposition.'
+    Assert ((Get-ALFAzureLocalIsoFileName '' "attachment; filename*=UTF-8''$isoName" '2609') -eq $isoName) 'Read the encoded Content-Disposition name.'
+    Assert ((Get-ALFAzureLocalIsoFileName "https://software-static.download.prss.microsoft.com/dbazure/x/$isoName" '' '2609') -eq $isoName) 'Read the ISO name from the final link.'
+    Assert ($null -eq (Get-ALFAzureLocalIsoFileName $bing '' '2609')) 'An unpublished release page is not an ISO name.'
+    Assert ($null -eq (Get-ALFAzureLocalIsoFileName '' "attachment; filename=$isoName" '2610')) 'Another release ISO name is not used.'
+    Assert ($null -eq (Get-ALFAzureLocalIsoFileName '' 'attachment; filename="..\AzureLocal.LCM.12.2609.0.iso"' '2609')) 'A name with a path is rejected.'
+    Assert ($null -eq (Get-ALFAzureLocalIsoFileName '' 'attachment; filename=AzureLocal.LCM.12.2609.0.zip' '2609')) 'Only ISO names are used.'
+    Assert ($null -eq (Get-ALFAzureLocalIsoFileName '' "attachment; filename=$isoName" '{{AzureLocalImageRelease}}')) 'A placeholder release gives no name.'
+    $defaultIso = Join-Path $fixtureRoot 'AzureLocal-2609.iso'
+    Assert ((Get-ALFAzureLocalIsoPath $defaultIso 'http://aka.ms/hcireleaseimage/2609' '2609') -eq $defaultIso) 'Only https links are looked up.'
+    Assert ((Get-ALFAzureLocalIsoPath $defaultIso 'https://127.0.0.1:1/iso' '2609' 2) -eq $defaultIso) 'An unreachable link keeps the fallback name.'
+    $ImageScript = '01.Host-PrepareDataDisk.ps1'
+    Set-Content -LiteralPath (Join-Path $fixtureRoot $ImageScript) -Value "`$AzureLocalImageRelease = `"2609`"`r`n`$AzureLocalIso = `"$defaultIso`""
+    $isoTask = [pscustomobject]@{ Id = 'AzureLocalIso' }
+    Assert ((Get-ImageLabel (Get-ImageInfo 'AzureLocalIso')) -eq "(Microsoft's file name for release 2609)") 'A new ISO card shows that Microsoft names the file.'
+    Assert ((Get-ImageSaveHint (Get-ImageInfo 'AzureLocalIso')) -like "*$fixtureRoot*keep Microsoft's file name*.LCM.12.2609.*") 'A browser download keeps Microsoft''s name.'
+    Assert ((Get-ImageSaveHint @{ Type = 'VHDX'; Dest = 'C:\ISO\Server.vhdx' }) -eq 'Save the file as C:\ISO\Server.vhdx') 'The VHDX keeps its planned name.'
+    Assert ((Get-ImageSaveHint @{ Type = 'ISO'; Dest = $null }) -eq '') 'A missing image name gives no save hint.'
+    $msIso = Join-Path $fixtureRoot $isoName
+    Set-Content -LiteralPath "$msIso.download" -Value 'partial'
+    Assert ((Get-TaskCheck $isoTask).State -eq 'Attention') 'An unfinished download under Microsoft''s name is reported.'
+    Move-Item -LiteralPath "$msIso.download" -Destination $msIso
+    Assert ((Get-ImageInfo 'AzureLocalIso').Dest -eq $msIso) 'A finished download under Microsoft''s name is used.'
+    Assert ((Get-ImageLabel (Get-ImageInfo 'AzureLocalIso')) -eq $isoName) 'The ISO card shows Microsoft''s file name.'
+    Assert ((Get-TaskCheck $isoTask).State -eq 'Done') 'A finished download under Microsoft''s name counts as done.'
     Assert (-not @(Get-ChildItem -LiteralPath $fixtureRoot -Filter '*.tmp').Count) 'No settings temporary files may remain.'
     Write-Output "PASS: $script:Passed focused node-selection checks; real WPF controls, no provisioning."
 }

@@ -20,6 +20,44 @@ function Resolve-ALFAzureLocalIso([string]$Default, [string]$Release) {
     return $Default
 }
 
+#Picks Microsoft's file name for the release ISO from a download's Content-Disposition header or the last
+#part of its final link. $null when neither is an Azure Local ISO for that release (an unpublished
+#release ends at a web page) or the name isn't a plain file name.
+function Get-ALFAzureLocalIsoFileName([string]$Uri, [string]$ContentDisposition, [string]$Release) {
+    if ($Release -notmatch '^[0-9]{4}$') { return $null }
+    $names = @()
+    if ($ContentDisposition -match 'filename\*?\s*=\s*(?:UTF-8''[^'']*'')?"?([^";]+)"?') { $names += $Matches[1].Trim() }
+    if ($Uri) { try { $names += ([Uri]$Uri).Segments[-1] } catch { } }
+    foreach ($name in $names) {
+        try { $name = [Uri]::UnescapeDataString($name) } catch { continue }
+        if ($name.IndexOfAny([IO.Path]::GetInvalidFileNameChars()) -ge 0) { continue }
+        if ($name -like 'AzureLocal*.iso' -and $name -like "*.LCM.12.$Release.*") { return $name }
+    }
+    return $null
+}
+
+#The path to download the release ISO to, keeping Microsoft's file name
+#(for example C:\ISO\AzureLocal24H2.26100.32230.LCM.12.2609.0.3009.x64.en-us.iso).
+#LEARN: A HEAD request follows the aka.ms redirect and reads only the headers, not the ISO itself.
+#       If the link can't be reached or doesn't end at that release's ISO, $Default is used.
+function Get-ALFAzureLocalIsoPath([string]$Default, [string]$Url, [string]$Release, [int]$TimeoutSeconds = 15) {
+    if ($Url -notmatch '^https://') { return $Default }
+    $response = $null
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+        $request = [Net.WebRequest]::Create($Url)
+        $request.Method = 'HEAD'
+        $request.AllowAutoRedirect = $true
+        $request.Timeout = $TimeoutSeconds * 1000
+        $response = $request.GetResponse()
+        $name = Get-ALFAzureLocalIsoFileName $response.ResponseUri.AbsoluteUri $response.Headers['Content-Disposition'] $Release
+        if ($name) { return Join-Path (Split-Path -Path $Default -Parent) $name }
+    }
+    catch { }
+    finally { if ($response) { $response.Close() } }
+    return $Default
+}
+
 #A lab has 2 to 16 Azure Local nodes (the planned pair is the default).
 function Test-ALFNodeNames([string[]]$Names) {
     if ($Names.Count -lt 2 -or $Names.Count -gt 16) { throw "Enter 2 to 16 node names (got $($Names.Count))." }

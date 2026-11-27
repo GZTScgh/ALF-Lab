@@ -18,7 +18,8 @@
 #     If BITS can't download, the console switches to a direct download.
 #   - The image names and links come from 01.Host-PrepareDataDisk.ps1 - change them there.
 #     The Azure Local release (2601-2611) is chosen in the Planning Console. An ISO already in
-#     C:\ISO with Microsoft's full name for that release counts as downloaded.
+#     C:\ISO with Microsoft's full name for that release counts as downloaded, and a new
+#     download keeps that name (AzureLocal-<release>.iso only if the name can't be read).
 #
 # LEARN: BITS (Background Intelligent Transfer Service) is Windows' built-in download engine.
 #        It resumes after network drops and keeps going in the background.
@@ -86,7 +87,7 @@ $Tasks = @(
         Text  = "The disk image for the domain controller and the admin station. Saved to C:\ISO." }
     [pscustomobject]@{ Id = "AzureLocalIso"; Kind = "Download"; Script = ""; Args = ""; Needs = @()
         Title = "Download the Azure Local ISO"
-        Text  = "The install image for the Azure Local nodes - release {{AzureLocalImageRelease}}, chosen in the Planning Console. Saved to C:\ISO. An ISO already there for the same release is used as is." }
+        Text  = "The install image for the Azure Local nodes - release {{AzureLocalImageRelease}}, chosen in the Planning Console. Saved to C:\ISO with Microsoft's file name. An ISO already there for the same release is used as is." }
     [pscustomobject]@{ Id = "HyperV";   Kind = "Script";   Script = "02.Host-InstallHyperV.ps1"; Args = ""; Needs = @()
         Title = "Install Hyper-V"
         Text  = "Installs the Hyper-V role and tools. The host restarts at the end (the script asks first) - start the console again after you sign back in." }
@@ -260,6 +261,20 @@ function Get-ImageInfo([string]$Id) {
     return $info
 }
 
+#The file name shown on a download card - a new Azure Local ISO keeps Microsoft's name, known once the download starts
+function Get-ImageLabel($img) {
+    if (-not $img.Dest) { if ($img.Problem) { return "(release not set - see the Planning Console)" }; return "(name not found in $ImageScript)" }
+    if ($img.Type -eq "ISO" -and -not (Test-Path -LiteralPath $img.Dest -PathType Leaf)) { return "(Microsoft's file name for release $($img.Release))" }
+    return Split-Path $img.Dest -Leaf
+}
+
+#Where to save an image the user downloads in the browser
+function Get-ImageSaveHint($img) {
+    if (-not $img.Dest) { return "" }
+    if ($img.Type -eq "ISO") { return "Save it in $(Split-Path $img.Dest) and keep Microsoft's file name (it contains .LCM.12.$($img.Release).)" }
+    return "Save the file as $($img.Dest)"
+}
+
 #How many node addresses the planned range holds; mirrors step 10 (script 11), which counts up the last octet.
 #$null when the range is not filled in, so the check is left to step 10.
 function Get-NodeIPCapacity {
@@ -391,7 +406,12 @@ function Get-TaskCheck($Task) {
             if (Test-Path -LiteralPath $img.Dest -PathType Leaf) {
                 return @{ State = "Done"; Detail = ("{0:N1} GB in {1}" -f ((Get-Item -LiteralPath $img.Dest).Length / 1GB), (Split-Path $img.Dest)) }
             }
-            if (Test-Path -LiteralPath "$($img.Dest).download") { return @{ State = "Attention"; Detail = "Unfinished download - start it again" } }
+            $partial = Test-Path -LiteralPath "$($img.Dest).download"
+            if (-not $partial -and $img.Type -eq "ISO") {
+                $partial = [bool](Get-ChildItem -LiteralPath (Split-Path $img.Dest) -Filter 'AzureLocal*.iso.download' -File -ErrorAction SilentlyContinue |
+                    Where-Object { $_.Name -like "*.LCM.12.$($img.Release).*" })
+            }
+            if ($partial) { return @{ State = "Attention"; Detail = "Unfinished download - start it again" } }
             return @{ State = "NotDone"; Detail = "" }
         }
         "HyperV" {
@@ -455,6 +475,7 @@ function Update-AllStatus {
     foreach ($t in $Tasks) {
         if ($script:Downloads.ContainsKey($t.Id)) { continue }                          #shown by the progress bar
         if ($script:Running -and $script:Running.Task.Id -eq $t.Id) { continue }       #shown as Running
+        if ($t.Kind -eq "Download") { $script:Rows[$t.Id].script.Text = Get-ImageLabel (Get-ImageInfo $t.Id) }
         $check = Get-TaskCheck $t
         $last  = $script:RunState[$t.Id]
         if ($t.Id -in 'Nodes', 'Prepare' -and (@($last.NodeNames) -join '|') -cne ($NodeNames -join '|')) { $last = $null }
@@ -569,7 +590,7 @@ function Start-ImageDownload($Task) {
     if ($img.Problem) { Write-Log $img.Problem; return }
     if (-not $img.Dest) { Write-Log "No image name found in $ImageScript - is it in $Here?"; return }
     if ($img.Url -notmatch '^https://') {
-        Write-Log "No download link set in $ImageScript for the $($img.Name) - opening the download page instead. Save the file as $($img.Dest)"
+        Write-Log "No download link set in $ImageScript for the $($img.Name) - opening the download page instead. $(Get-ImageSaveHint $img)"
         if ($img.Page) { Start-Process $img.Page }
         return
     }
@@ -577,6 +598,11 @@ function Start-ImageDownload($Task) {
         $answer = [System.Windows.MessageBox]::Show("$($img.Dest) is already there.`n`nDelete it and download it again?", "2. ALF Lab Builder - Host Console", "YesNo", "Question")
         if ($answer -ne "Yes") { return }
         Remove-Item -LiteralPath $img.Dest -Force
+    }
+    if ($img.Type -eq "ISO") {
+        Remove-Item -LiteralPath "$($img.Dest).download" -Force -ErrorAction SilentlyContinue   #unfinished download under the old name
+        $img.Dest = Get-ALFAzureLocalIsoPath $img.Dest $img.Url $img.Release
+        $script:Rows[$Task.Id].script.Text = Split-Path $img.Dest -Leaf
     }
     $folder = Split-Path $img.Dest
     New-Item -Path $folder -ItemType Directory -Force | Out-Null
@@ -791,7 +817,12 @@ function Resume-ExistingDownloads {
         $img = Get-ImageInfo $t.Id
         $job = Get-BitsTransfer -ErrorAction SilentlyContinue | Where-Object DisplayName -eq "ALF: $($img.Name)" | Select-Object -First 1
         if (-not $job -or -not $img.Dest) { continue }
-        $script:Downloads[$t.Id] = @{ Id = $t.Id; Name = $img.Name; Type = $img.Type; Url = $img.Url; Dest = $img.Dest; Temp = "$($img.Dest).download"
+        #The job's own file is used, so a download keeps the name it was started with
+        $temp = "$(@($job.FileList)[0].LocalName)"
+        if ($temp -notlike '*.download') { $temp = "$($img.Dest).download" }
+        $dest = $temp.Substring(0, $temp.Length - '.download'.Length)
+        $script:Rows[$t.Id].script.Text = Split-Path $dest -Leaf
+        $script:Downloads[$t.Id] = @{ Id = $t.Id; Name = $img.Name; Type = $img.Type; Url = $img.Url; Dest = $dest; Temp = $temp
                                       MinGB = $img.MinGB; Mode = "BITS"; JobId = $job.JobId; LastBytes = [int64]0; LastTime = $null; Speed = 0.0
                                       Started = $job.CreationTime; TransientSince = $null }
         Show-DownloadUI $t.Id $true
@@ -838,7 +869,7 @@ foreach ($t in $Tasks) {
     }
     else {
         $img = Get-ImageInfo $t.Id
-        $row.script.Text   = if ($img.Dest) { Split-Path $img.Dest -Leaf } elseif ($img.Problem) { "(release not set - see the Planning Console)" } else { "(name not found in $ImageScript)" }
+        $row.script.Text   = Get-ImageLabel $img
         $row.extra.Content = "Open page"
     }
     $row.run.Tag = $t.Id
@@ -866,7 +897,7 @@ function Invoke-ExtraButton([string]$Id) {
     if ($t.Kind -eq "Download") {
         $img = Get-ImageInfo $Id
         if ($img.Problem) { Write-Log $img.Problem }
-        elseif ($img.Page) { Start-Process $img.Page; Write-Log "Opened the $($img.Name) download page. A file you download yourself goes in C:\ISO as $(Split-Path $img.Dest -Leaf)" }
+        elseif ($img.Page) { Start-Process $img.Page; Write-Log "Opened the $($img.Name) download page. $(Get-ImageSaveHint $img)" }
     }
     else {
         $path = Join-Path $Here $t.Script

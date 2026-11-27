@@ -54,8 +54,9 @@ $ServerVhdPage = "https://www.microsoft.com/en-us/evalcenter/download-windows-se
 #       The portal route (Azure portal -> Azure Local -> Get started -> Download software)
 #       gives the same image. If $AzureLocalIsoUrl is ever blank, the script falls back to
 #       opening that portal page and waiting for you to download it in the browser.
-#       An ISO already in C:\ISO with Microsoft's full name for the same release
-#       (...LCM.12.<release>.x.y...iso) is used as is - it is not downloaded again.
+#       The download keeps Microsoft's file name (...LCM.12.<release>.x.y...iso); an ISO
+#       already in C:\ISO with that name for the same release is used as is - it is not
+#       downloaded again. $AzureLocalIso is only used if Microsoft's name can't be read.
 $AzureLocalImageRelease = "{{AzureLocalImageRelease}}"   #set in the Lab Builder (2601-2611)
 $AzureLocalIso    = "C:\ISO\AzureLocal-{{AzureLocalImageRelease}}.iso"
 $AzureLocalIsoUrl = "https://aka.ms/hcireleaseimage/{{AzureLocalImageRelease}}"
@@ -128,8 +129,10 @@ function Get-LabFile {
 }
 
 #========== HELPER: wait for a browser download, then move it to C:\ISO ==========
+#A file whose name matches every -KeepNameLike pattern keeps its own name in the destination folder.
+#Returns the final path.
 function Wait-ForBrowserDownload {
-    param([string]$Page, [string]$Pattern, [string]$Destination, [string]$Name, [double]$MinSizeGB)
+    param([string]$Page, [string]$Pattern, [string]$Destination, [string]$Name, [double]$MinSizeGB, [string[]]$KeepNameLike)
 
     $Downloads = Join-Path $env:USERPROFILE "Downloads"
     Write-Host "    Opening $Name download page in the browser..." -ForegroundColor Cyan
@@ -144,9 +147,13 @@ function Wait-ForBrowserDownload {
     $SizeGB = [math]::Round($File.Length / 1GB, 1)
     if ($SizeGB -lt $MinSizeGB) { throw "$($File.Name) is only $SizeGB GB - is the download still running?" }
 
+    if ($KeepNameLike -and -not ($KeepNameLike | Where-Object { $File.Name -notlike $_ })) {
+        $Destination = Join-Path (Split-Path $Destination) $File.Name
+    }
     Write-Host "    Moving $($File.Name) to $Destination" -ForegroundColor Cyan
-    Move-Item -Path $File.FullName -Destination $Destination -Force
+    Move-Item -LiteralPath $File.FullName -Destination $Destination -Force
     Write-Host "    Ready: $Destination ($SizeGB GB)" -ForegroundColor Green
+    return $Destination
 }
 
 
@@ -212,7 +219,7 @@ elseif ($ServerVhdUrl -match '^https://') {
 }
 else {
     Write-Host "    No download link set in `$ServerVhdUrl - using the browser instead" -ForegroundColor Yellow
-    Wait-ForBrowserDownload -Page $ServerVhdPage -Pattern "*.vhdx" -Destination $ServerVhd `
+    $ServerVhd = Wait-ForBrowserDownload -Page $ServerVhdPage -Pattern "*.vhdx" -Destination $ServerVhd `
         -Name "Windows Server 2025 evaluation VHDX (English, 'VHD download 64-bit edition')" -MinSizeGB 5
 }
 
@@ -237,12 +244,14 @@ if (Test-Path $AzureLocalIso -PathType Leaf) {
     Write-Host "    Found: $AzureLocalIso ($([math]::Round((Get-Item $AzureLocalIso).Length/1GB,1)) GB) - skipping download" -ForegroundColor Yellow
 }
 elseif ($AzureLocalIsoUrl -match '^https://') {
+    $AzureLocalIso = Get-ALFAzureLocalIsoPath $AzureLocalIso $AzureLocalIsoUrl $AzureLocalImageRelease
+    Write-Host "    Saving as $(Split-Path $AzureLocalIso -Leaf)" -ForegroundColor Cyan
     Get-LabFile -Url $AzureLocalIsoUrl -Destination $AzureLocalIso -Name "Azure Local $AzureLocalImageRelease ISO" -MinSizeGB 3
 }
 else {
     Write-Host "    Sign in to the Azure portal -> Azure Local -> Get started -> Download software" -ForegroundColor Yellow
-    Wait-ForBrowserDownload -Page $AzureLocalPage -Pattern "*.iso" -Destination $AzureLocalIso `
-        -Name "Azure Local ISO" -MinSizeGB 3
+    $AzureLocalIso = Wait-ForBrowserDownload -Page $AzureLocalPage -Pattern "*.iso" -Destination $AzureLocalIso `
+        -Name "Azure Local ISO" -MinSizeGB 3 -KeepNameLike 'AzureLocal*.iso', "*.LCM.12.$AzureLocalImageRelease.*"
 }
 
 #Confirm the ISO opens

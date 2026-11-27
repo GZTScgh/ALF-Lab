@@ -434,7 +434,7 @@
                        "Group":  "4. Azure Local cluster",
                        "Label":  "Azure Local image release",
                        "Value":  "2608",
-                       "Description":  "Which Azure Local release image (ISO) the host downloads and installs the nodes from, as YYMM: 2608 = August 2026. The host downloads https://aka.ms/hcireleaseimage/\u003crelease\u003e to C:\\ISO\\AzureLocal-\u003crelease\u003e.iso; an ISO already in C:\\ISO for the same release is used as is. Choose it before Prepare data disk (01) and Create node VMs (10). To move an existing lab to a newer version without a different ISO, set Target solution version below instead.",
+                       "Description":  "Which Azure Local release image (ISO) the host downloads and installs the nodes from, as YYMM: 2608 = August 2026. The host downloads https://aka.ms/hcireleaseimage/\u003crelease\u003e to C:\\ISO and keeps Microsoft\u0027s file name (AzureLocal-\u003crelease\u003e.iso if the name can\u0027t be read); an ISO already in C:\\ISO for the same release is used as is. Choose it before Prepare data disk (01) and Create node VMs (10). To move an existing lab to a newer version without a different ISO, set Target solution version below instead.",
                        "Example":  "2608",
                        "Pattern":  "^2[6-9](0[1-9]|1[0-2])$",
                        "Hint":  "Pick 2601 to 2611 from the list (YYMM). 2611 may not be published yet - if its download fails, use Open page / the Azure portal, or choose 2610.",

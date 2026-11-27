@@ -421,7 +421,7 @@ function Initialize-ALFDomainPlan($Plan) {
 function Get-ALFImagePlanRows {
     [pscustomobject]@{
         Key = 'AzureLocalImageRelease'; Group = '4. Azure Local cluster'; Label = 'Azure Local image release'; Value = '2608'
-        Description = 'Which Azure Local release image (ISO) the host downloads and installs the nodes from, as YYMM: 2608 = August 2026. The host downloads https://aka.ms/hcireleaseimage/<release> to C:\ISO\AzureLocal-<release>.iso; an ISO already in C:\ISO for the same release is used as is. Choose it before Prepare data disk (01) and Create node VMs (10). To move an existing lab to a newer version without a different ISO, set Target solution version below instead.'
+        Description = 'Which Azure Local release image (ISO) the host downloads and installs the nodes from, as YYMM: 2608 = August 2026. The host downloads https://aka.ms/hcireleaseimage/<release> to C:\ISO and keeps Microsoft''s file name (AzureLocal-<release>.iso if the name can''t be read); an ISO already in C:\ISO for the same release is used as is. Choose it before Prepare data disk (01) and Create node VMs (10). To move an existing lab to a newer version without a different ISO, set Target solution version below instead.'
         Example = '2608'; Pattern = '^2[6-9](0[1-9]|1[0-2])$'
         Hint = 'Pick 2601 to 2611 from the list (YYMM). 2611 may not be published yet - if its download fails, use Open page / the Azure portal, or choose 2610.'
         UsedIn = '01.Host-PrepareDataDisk.ps1, 10.Host-CreateNodeVMs.ps1, ALFHostConsole.ps1'
@@ -438,6 +438,11 @@ function Get-ALFImagePlanRows {
 }
 
 function Initialize-ALFImagePlan($Plan) {
+    #Plans from 2.1.0 still describe the ISO as renamed to AzureLocal-<release>.iso - refresh that help text
+    $release = @($Plan.Values | Where-Object Key -eq 'AzureLocalImageRelease') | Select-Object -First 1
+    if ($release -and [string]$release.Description -like '*\AzureLocal-<release>.iso; an ISO*') {
+        $release.Description = (Get-ALFImagePlanRows | Where-Object Key -eq 'AzureLocalImageRelease').Description
+    }
     #Plans from 2.0.23 and older have no image-release or target-version rows - add them after the cluster name
     $missing = @(Get-ALFImagePlanRows | Where-Object { $key = $_.Key; -not ($Plan.Values | Where-Object Key -eq $key) })
     if (-not $missing.Count) { return }

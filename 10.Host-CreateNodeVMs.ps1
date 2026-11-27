@@ -31,6 +31,7 @@ $AzureLocalImageRelease = "{{AzureLocalImageRelease}}"
 #Azure Local install .ISO
 #An ISO already in C:\ISO with Microsoft's full name for the same release
 #(...LCM.12.<release>.x.y...iso) is used instead, so it is not downloaded twice.
+#A download keeps Microsoft's file name; this name is only used if that name can't be read.
 $InstallMedia = "C:\ISO\AzureLocal-{{AzureLocalImageRelease}}.iso"
 
 #Where to download the ISO if it's missing from C:\ISO
@@ -91,7 +92,14 @@ if (Test-Path -Path $InstallMedia -PathType Leaf) {
     Write-Host "    Found: $InstallMedia ($([math]::Round((Get-Item $InstallMedia).Length/1GB,1)) GB)" -ForegroundColor Green
 }
 else {
-    Write-Host "    Not found - downloading from $InstallMediaUrl" -ForegroundColor Yellow
+    #Keep Microsoft's file name for the download (AzureLocal-<release>.iso if it can't be read)
+    $InstallMedia = Get-ALFAzureLocalIsoPath $InstallMedia $InstallMediaUrl $AzureLocalImageRelease
+    $TempFile = "$InstallMedia.download"
+    if (Test-Path -LiteralPath $TempFile) {
+        Write-Host "    Removing an unfinished earlier download" -ForegroundColor Yellow
+        Remove-Item -LiteralPath $TempFile -Force
+    }
+    Write-Host "    Not found - downloading from $InstallMediaUrl as $(Split-Path $InstallMedia -Leaf)" -ForegroundColor Yellow
     New-Item -Path (Split-Path $InstallMedia) -ItemType Directory -Force | Out-Null
 
     #Download to a temporary name first, so a half-finished download is never used
@@ -111,11 +119,11 @@ else {
     $SizeGB = [math]::Round((Get-Item $TempFile).Length / 1GB, 1)
     if ($SizeGB -lt 3) {
         Remove-Item $TempFile -Force
-        throw "Azure Local ISO download is only $SizeGB GB - release $AzureLocalImageRelease may not be published yet. Choose another release in the Planning Console, or download it from the Azure portal into C:\ISO as $InstallMedia"
+        throw "Azure Local ISO download is only $SizeGB GB - release $AzureLocalImageRelease may not be published yet. Choose another release in the Planning Console, or download it from the Azure portal into C:\ISO (keep Microsoft's file name)"
     }
 
-    #Give it the name the rest of the script expects
-    Move-Item -Path $TempFile -Destination $InstallMedia -Force
+    #Drop the temporary .download ending
+    Move-Item -LiteralPath $TempFile -Destination $InstallMedia -Force
     Write-Host "    Downloaded: $InstallMedia ($SizeGB GB)" -ForegroundColor Green
 }
 
